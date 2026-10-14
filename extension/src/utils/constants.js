@@ -29,6 +29,9 @@ export const DEFAULT_CONFIG = {
   // null/absent = jamais configuré -> comportement legacy (5 cases + liste fixe) ;
   // [] = configuré explicitement à zéro module -> aucun module actif.
   customModules: null,
+  // Round 8 — exports : false = les findings marqués « Faux positif » sont exclus
+  // de tous les formats d'export ; true = inclus.
+  includeFalsePositivesInExport: false,
   excludedUrls: [],
   useBackend: true, // REQUIS depuis v1.1
   backendUrl: "http://localhost:9876",

@@ -80,6 +80,8 @@ async function loadHistory() {
 // =====================================================
 // Thème clair/sombre (Round 7, Task 8)
 // =====================================================
+// Unique lecture GET_CONFIG au démarrage : elle sert aussi à initialiser la case
+// « Inclure les faux positifs » des exports (Round 8, Task 1).
 async function initTheme() {
   let cfg;
   try {
@@ -88,6 +90,8 @@ async function initTheme() {
     cfg = null;
   }
   applyTheme(cfg?.theme === "light" ? "light" : "dark");
+  const chkFP = document.getElementById("chkIncludeFP");
+  if (chkFP) chkFP.checked = !!cfg?.includeFalsePositivesInExport;
 }
 
 // data-theme="light" active le bloc d'overrides CSS ; "dark" = pas d'attribut
@@ -133,6 +137,14 @@ function setupEventListeners() {
   document.getElementById("btnExportPdf").addEventListener("click",  () => exportReport("pdf"));
   const xmlBtn = document.getElementById("btnExportXml");
   if (xmlBtn) xmlBtn.addEventListener("click", () => exportReport("xml"));
+  document.getElementById("chkIncludeFP").addEventListener("change", async (e) => {
+    const result = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+    if (!result || result.error) { console.warn("[VulnScan] GET_CONFIG KO, réglage non sauvegardé"); return; }
+    await chrome.runtime.sendMessage({
+      type: "SET_CONFIG",
+      payload: { ...result, includeFalsePositivesInExport: e.target.checked },
+    });
+  });
 
   document.getElementById("searchInput").addEventListener("input", (e) => {
     currentSearch = e.target.value.toLowerCase().trim();
@@ -1256,12 +1268,16 @@ async function exportReport(format) {
     alert("Aucune vulnérabilité à exporter. Lancez d'abord un scan.");
     return;
   }
+  // Point de filtrage unique (Round 8, Task 1) : appliqué avant le dispatch par
+  // format, donc identique pour JSON/CSV/HTML/XML/PDF (et SARIF plus tard).
+  const includeFP = document.getElementById("chkIncludeFP")?.checked ?? false;
+  const vulnsToExport = includeFP ? allVulns : allVulns.filter(v => v.triageStatus !== "false_positive");
   const scan = {
     id: lastScanId || crypto.randomUUID(),
     url: document.getElementById("urlDisplay").textContent || "",
     startedAt: allVulns[0]?.detectedAt || Date.now(),
     finishedAt: Date.now(),
-    vulnerabilities: allVulns,
+    vulnerabilities: vulnsToExport,
   };
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
   const baseName = `vulnscan-${stamp}`;
