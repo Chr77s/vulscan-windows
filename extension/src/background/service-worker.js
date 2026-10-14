@@ -242,7 +242,7 @@ const SCAN_PROFILES = {
     // Couverture équilibrée : passive + actifs majeurs
     "headers", "info-disclosure", "tech-fingerprint", "cors-misconfig",
     "jwt-analysis", "waf-detect",
-    "sqli", "xss", "lfi", "open-redirect", "idor", "ssrf", "xxe",
+    "sqli", "xss", "lfi", "open-redirect", "idor", "ssrf", "xxe", "ssti",
     "file-exposure", "form-fuzzer", "header-injection",
   ],
   deep: [
@@ -250,7 +250,7 @@ const SCAN_PROFILES = {
     "headers", "info-disclosure", "tech-fingerprint", "cors-misconfig",
     "jwt-analysis", "waf-detect",
     "sqli", "xss", "lfi", "command-injection", "open-redirect", "idor",
-    "ssrf", "xxe",
+    "ssrf", "xxe", "ssti",
     "file-exposure", "dir-bruteforce", "rate-limit",
     "form-fuzzer", "header-injection", "param-discovery", "json-fuzzer",
     "ssl-tls", "graphql", "race-conditions", "subdomain-enum",
@@ -258,7 +258,7 @@ const SCAN_PROFILES = {
   owasp: [
     // Focalisé OWASP Top 10
     "sqli", "xss", "csrf", "lfi", "command-injection", "open-redirect", "idor",
-    "ssrf", "xxe", "jwt-analysis", "headers", "info-disclosure", "ssl-tls",
+    "ssrf", "xxe", "ssti", "jwt-analysis", "headers", "info-disclosure", "ssl-tls",
     "form-fuzzer",
   ],
   api: [
