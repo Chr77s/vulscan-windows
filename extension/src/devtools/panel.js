@@ -62,6 +62,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     currentDiscovery = scanHistory[0].discovery || null;
     renderAll();
     updateScanMeta(scanHistory[0]);
+    restoreModuleLog(scanHistory[0]);
   }
 
   setupEventListeners();
@@ -106,6 +107,10 @@ async function onToggleTheme() {
   applyTheme(next);
   try {
     const cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+    if (!cfg || cfg.error) {
+      console.warn("[VulnScan] GET_CONFIG invalide, SET_CONFIG (theme) annulé :", cfg?.error);
+      return;
+    }
     await chrome.runtime.sendMessage({ type: "SET_CONFIG", payload: { ...cfg, theme: next } });
   } catch (e) {
     console.warn("[VulnScan] SET_CONFIG (theme) KO :", e.message);
@@ -176,9 +181,15 @@ function setupRuntimeListeners() {
       currentDiscovery = message.payload.discovery || null;
       renderAll();
       updateScanMeta(message.payload);
+      // Fix 3 (final-fix-wave) : resynchronise le log d'activité sur la version
+      // finale renvoyée par le backend (currentScan.moduleLog) — couvre le cas
+      // où le panel a raté des MODULE_LOG en cours de scan (reconnexion DevTools).
+      restoreModuleLog(message.payload);
       setScanningState(false);
       setStatus("ready", "Scan terminé");
       setScanProgress("Terminé", 100);
+      // Note : seule la barre de progression se masque après 1.5s — la console
+      // d'activité (#moduleLogWrap) est un conteneur séparé, non affecté.
       setTimeout(() => hideProgress(), 1500);
       loadHistory();
     }
@@ -204,10 +215,23 @@ function setupRuntimeListeners() {
 
 // =====================================================
 // Console d'activité par module (Round 7)
+// Fix 3 (final-fix-wave) : le conteneur #moduleLogConsole vit maintenant HORS
+// de #scanProgressWrap (voir panel.html) — il reste visible après la fin du
+// scan au lieu de disparaître avec le setTimeout(hideProgress, 1500).
+// Fix 5 (final-fix-wave) : un module qui a crashé (entry.status === "error")
+// s'affiche avec un marqueur "✗" distinct, au lieu d'un "✓ ... 0 findings"
+// indiscernable d'un module qui a simplement rien trouvé.
 // =====================================================
+function formatModuleLogLine(e) {
+  if (e.status === "error") {
+    return `✗ ${e.module} — erreur (${e.error || "inconnue"}) (${e.elapsedMs}ms)`;
+  }
+  return `✓ ${e.module} — ${e.findings} findings (${e.elapsedMs}ms)`;
+}
+
 function appendModuleLog(entries) {
   for (const e of entries) {
-    moduleLogLines.push(`✓ ${e.module} — ${e.findings} findings (${e.elapsedMs}ms)`);
+    moduleLogLines.push(formatModuleLogLine(e));
   }
   if (moduleLogLines.length > 50) {
     moduleLogLines = moduleLogLines.slice(moduleLogLines.length - 50);
@@ -215,15 +239,28 @@ function appendModuleLog(entries) {
   renderModuleLog();
 }
 
+// Restaure le log d'activité à partir d'un scan stocké (historique, reconnexion
+// du panel) — scan.moduleLog est le tableau brut renvoyé par le backend,
+// stocké sur currentScan par le service-worker (Fix 3, point 2).
+function restoreModuleLog(scan) {
+  const entries = (scan && scan.moduleLog) || [];
+  moduleLogLines = entries.map(formatModuleLogLine);
+  if (moduleLogLines.length > 50) {
+    moduleLogLines = moduleLogLines.slice(moduleLogLines.length - 50);
+  }
+  renderModuleLog();
+}
+
 function renderModuleLog() {
+  const wrap = document.getElementById("moduleLogWrap");
   const el = document.getElementById("moduleLogConsole");
-  if (!el) return;
+  if (!el || !wrap) return;
   if (moduleLogLines.length === 0) {
-    el.classList.remove("visible");
+    wrap.classList.remove("visible");
     el.innerHTML = "";
     return;
   }
-  el.classList.add("visible");
+  wrap.classList.add("visible");
   el.innerHTML = moduleLogLines
     .map((line) => `<div class="module-log-line">${escapeHtml(line)}</div>`)
     .join("");
@@ -536,6 +573,7 @@ function renderCards() {
         const v = allVulns.find(x => x.id === id);
         if (v) v.triageStatus = status;
         renderCards();
+        updateFilterCounts();
       } else {
         alert("Triage non enregistré : " + (result?.error || "erreur inconnue"));
       }
@@ -725,6 +763,7 @@ function renderHistory() {
         currentDiscovery = scan.discovery || null;
         renderAll();
         updateScanMeta(scan);
+        restoreModuleLog(scan);
         switchTab("results");
       }
     });
@@ -1087,10 +1126,17 @@ function buildSurfaceFormsHtml(forms) {
 // =====================================================
 // MODULES (sélecteur fin des modules de scan actif — Round 7).
 // Remplace le profil "Custom" historique à 5 cases (Options) : cfg.customModules
-// null/absent = jamais configuré -> comportement legacy (toutes les cases
-// apparaissent cochées ici, à titre d'affichage) ; [] = configuré à zéro module.
+// null/absent = jamais configuré -> affichage calqué sur ce que le comportement
+// legacy exécute RÉELLEMENT aujourd'hui (les 5 cases historiques + la liste fixe
+// — voir computeLegacyEnabledModules() côté service-worker, demandé via le
+// message GET_LEGACY_ENABLED_MODULES pour éviter toute divergence d'affichage) ;
+// [] = configuré explicitement à zéro module.
 // Les métadonnées viennent de GET /scanner/modules (backend interne, pas de
 // données issues de la cible scannée) — escapeHtml() par prudence quand même.
+//
+// Fix 1 (final-fix-wave) : cocher/décocher une case ici bascule automatiquement
+// cfg.scanProfile sur "custom" (voir onModuleCheckboxChange) — sinon la sélection
+// n'a aucun effet tant que le profil actif (Options) n'est pas déjà "Custom".
 // =====================================================
 async function renderModuleList() {
   const container = document.getElementById("moduleList");
@@ -1123,9 +1169,21 @@ async function renderModuleList() {
     return;
   }
 
-  // null -> jamais configuré : affichage "tout coché" (reflète le comportement
-  // legacy), sans pour autant écrire quoi que ce soit dans cfg.customModules.
-  const activeSet = Array.isArray(cfg.customModules) ? new Set(cfg.customModules) : null;
+  // null -> jamais configuré : on affiche exactement l'ensemble legacy réel
+  // (celui que runActiveModules() utiliserait aujourd'hui), pas "tout coché" —
+  // sans pour autant écrire quoi que ce soit dans cfg.customModules.
+  let activeSet;
+  if (Array.isArray(cfg.customModules)) {
+    activeSet = new Set(cfg.customModules);
+  } else {
+    let legacyEnabled = [];
+    try {
+      legacyEnabled = await chrome.runtime.sendMessage({ type: "GET_LEGACY_ENABLED_MODULES" }) || [];
+    } catch {
+      legacyEnabled = [];
+    }
+    activeSet = new Set(legacyEnabled);
+  }
 
   const byCategory = new Map();
   for (const m of modules) {
@@ -1137,7 +1195,7 @@ async function renderModuleList() {
   container.innerHTML = [...byCategory.entries()].map(([cat, mods]) => `
     <div class="group-header" style="margin:0 -14px">${escapeHtml(cat)} <span class="group-count">${mods.length}</span></div>
     ${mods.map((m) => {
-      const checked = activeSet ? activeSet.has(m.name) : true;
+      const checked = activeSet.has(m.name);
       return `
         <div class="card" style="margin:6px 0;padding:10px 14px">
           <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
@@ -1160,7 +1218,16 @@ async function onModuleCheckboxChange() {
   const checkedNames = [...document.querySelectorAll(".module-checkbox:checked")].map((cb) => cb.dataset.module);
   try {
     const cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
-    await chrome.runtime.sendMessage({ type: "SET_CONFIG", payload: { ...cfg, customModules: checkedNames } });
+    if (!cfg || cfg.error) {
+      console.warn("[VulnScan] GET_CONFIG invalide, SET_CONFIG (customModules) annulé :", cfg?.error);
+      return;
+    }
+    // Fix 1 (final-fix-wave) : basculer automatiquement sur le profil "Custom" —
+    // sinon la sélection ci-dessus n'a aucun effet tant qu'un autre profil est actif.
+    await chrome.runtime.sendMessage({
+      type: "SET_CONFIG",
+      payload: { ...cfg, customModules: checkedNames, scanProfile: "custom" },
+    });
   } catch (e) {
     console.warn("[VulnScan] SET_CONFIG (customModules) KO :", e.message);
   }

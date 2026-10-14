@@ -510,9 +510,18 @@
       margin-top: 5px;
       display: flex; justify-content: space-between;
     }
-    .module-log-console {
+    /* Fix 3 (final-fix-wave) : #moduleLogWrap est un conteneur à part, frère de
+       #scanProgressWrap (pas un enfant) — il ne doit JAMAIS être masqué par le
+       setTimeout(hideProgress, 1500) de SCAN_COMPLETED. La console d'activité
+       doit rester consultable après la fin du scan, c'est tout son intérêt. */
+    .module-log-wrap {
       display: none;
-      margin-top: 8px;
+      padding: 8px 18px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+    }
+    .module-log-wrap.visible { display: block; }
+    .module-log-console {
       max-height: 110px;
       overflow-y: auto;
       font-family: 'JetBrains Mono', 'Courier New', monospace;
@@ -523,7 +532,6 @@
       border-radius: 6px;
       padding: 6px 10px;
     }
-    .module-log-console.visible { display: block; }
     .module-log-console .module-log-line {
       white-space: pre-wrap; word-break: break-word;
       line-height: 1.5;
@@ -652,6 +660,13 @@
       <span id="scanProgressStage">En attente</span>
       <span id="scanProgressPct">0%</span>
     </div>
+  </div>
+
+  <!-- Console d'activité par module (Round 7). Volontairement HORS de
+       #scanProgressWrap (Fix 3, final-fix-wave) : reste visible après la fin
+       du scan — et après réouverture du panel / d'un scan de l'historique —
+       au lieu de disparaître avec la barre de progression après 1.5s. -->
+  <div class="module-log-wrap" id="moduleLogWrap">
     <div class="module-log-console" id="moduleLogConsole"></div>
   </div>
 
@@ -751,8 +766,11 @@
   <!-- TAB MODULES (sélecteur fin des modules de scan actif — Round 7, remplace
        le profil "Custom" historique à 5 cases dans les Options) -->
   <main class="tab-panel" data-tab-panel="modules" style="flex:1;flex-direction:column;background:var(--bg-0);overflow-y:auto">
-    <div style="padding:10px 18px;background:var(--bg-1);border-bottom:1px solid var(--border);font-size:11.5px;color:var(--text-2)">
-      Sélectionnez les modules à exécuter lors des tests actifs. Tant que vous ne modifiez rien ici, le profil "Custom" historique (Options) continue de s'appliquer.
+    <div style="padding:10px 18px;background:var(--bg-1);border-bottom:1px solid var(--border);font-size:11.5px;color:var(--text-2);line-height:1.5">
+      Sélectionnez les modules à exécuter lors des tests actifs.
+      <strong>Cette sélection n'est utilisée que lorsque le profil de scan actif est "Custom"</strong> (Options) —
+      cocher ou décocher une case ci-dessus bascule automatiquement le profil sur "Custom" dès votre premier changement,
+      pour que la sélection prenne effet au prochain scan.
     </div>
     <div class="cards-container" id="moduleList">
       <div class="empty"><div class="empty-icon">⚙</div><div>Chargement des modules...</div></div>

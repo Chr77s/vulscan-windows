@@ -22,6 +22,9 @@ export const DEFAULT_CONFIG = {
   // Général
   minSeverity: "low",
   requestsPerSecond: 10,
+  // Round 7 — thème clair/sombre (Task 8). "dark" est la valeur par défaut ;
+  // toute valeur différente de "light" est traitée comme sombre par panel.js.
+  theme: "dark",
   // Round 7 — sélecteur fin de modules (remplace le profil "Custom" à 5 cases)
   // null/absent = jamais configuré -> comportement legacy (5 cases + liste fixe) ;
   // [] = configuré explicitement à zéro module -> aucun module actif.

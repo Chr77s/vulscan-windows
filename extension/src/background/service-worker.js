@@ -100,12 +100,17 @@ async function handleMessage(message) {
       const scan = history.find(s => s.id === scanId) || history[0] || null;
       return { success: !!scan, scan };
     }
+    case "GET_LEGACY_ENABLED_MODULES": {
+      const { config } = await chrome.storage.local.get("config");
+      const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
+      return computeLegacyEnabledModules(cfg);
+    }
     case "SET_TRIAGE": {
       const { scanId, findingId, status, note } = message.payload || {};
       const { config } = await chrome.storage.local.get("config");
       const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
       try {
-        const r = await fetch(`${cfg.backendUrl}/history/triage/${findingId}`, {
+        const r = await fetch(`${cfg.backendUrl}/history/triage/${encodeURIComponent(findingId)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status, note }),
@@ -208,6 +213,7 @@ async function startScan(tabId, url) {
         broadcastMessage({ type: "VULN_FOUND", payload: enriched });
       }
       if (discovery) currentScan.discovery = discovery;
+      if (moduleLog) currentScan.moduleLog = moduleLog;
       if (moduleLog && moduleLog.length) broadcastMessage({ type: "MODULE_LOG", payload: moduleLog });
       console.log("[VulnScan] Tests actifs : " + activeVulns.length + " findings");
     } catch (e) {
@@ -297,6 +303,32 @@ const SCAN_PROFILES = {
   ],
 };
 
+// Mapping des 5 anciennes cases "Tests actifs" (Options) vers des noms de module.
+const CONFIG_TO_MODULES = {
+  testSQLi:          "sqli",
+  testXSS:           "xss",
+  testPathTraversal: "lfi",
+  testCmdInjection:  "command-injection",
+  testOpenRedirect:  "open-redirect",
+};
+
+// Calcule l'ensemble de modules réellement actifs dans le comportement LEGACY
+// (celui appliqué quand cfg.customModules n'a jamais été configuré) : les 5
+// anciennes cases cochées + la liste fixe historique. Fix 2 (final-fix-wave) :
+// source de vérité UNIQUE, partagée entre runActiveModules() (exécution réelle)
+// et le message GET_LEGACY_ENABLED_MODULES (affichage du panel, onglet Modules).
+function computeLegacyEnabledModules(cfg) {
+  const enabled = [];
+  for (const [key, moduleName] of Object.entries(CONFIG_TO_MODULES)) {
+    if (cfg[key]) enabled.push(moduleName);
+  }
+  enabled.push("idor", "ssrf", "xxe", "cors-misconfig", "jwt-analysis",
+               "tech-fingerprint", "file-exposure", "dir-bruteforce",
+               "form-fuzzer", "header-injection", "param-discovery", "json-fuzzer",
+               "ssl-tls", "graphql", "waf-detect");
+  return enabled;
+}
+
 async function runActiveModules(cfg, url) {
   let enabled = [];
 
@@ -311,20 +343,7 @@ async function runActiveModules(cfg, url) {
       enabled = [...cfg.customModules];
     } else {
       // legacy fallback — unchanged from before this task
-      const CONFIG_TO_MODULES = {
-        testSQLi:          "sqli",
-        testXSS:           "xss",
-        testPathTraversal: "lfi",
-        testCmdInjection:  "command-injection",
-        testOpenRedirect:  "open-redirect",
-      };
-      for (const [key, moduleName] of Object.entries(CONFIG_TO_MODULES)) {
-        if (cfg[key]) enabled.push(moduleName);
-      }
-      enabled.push("idor", "ssrf", "xxe", "cors-misconfig", "jwt-analysis",
-                   "tech-fingerprint", "file-exposure", "dir-bruteforce",
-                   "form-fuzzer", "header-injection", "param-discovery", "json-fuzzer",
-                   "ssl-tls", "graphql", "waf-detect");
+      enabled = computeLegacyEnabledModules(cfg);
     }
   }
 
@@ -495,20 +514,82 @@ function stopScan() {
   return finalizeScan();
 }
 
+// Bornes appliquées UNIQUEMENT à la copie écrite dans chrome.storage.local.scanHistory
+// (quota ~10 Mo, pas d'unlimitedStorage) — l'objet `scan` original, non tronqué, part
+// tel quel vers le backend SQLite (pushScanToBackend) et reste en mémoire (currentScan/
+// allVulns côté panel) pour l'affichage de la session en cours.
+const HISTORY_EVIDENCE_BODY_CAP = 2048;   // body / body_snippet par finding
+const HISTORY_FORM_VALUE_CAP = 256;       // discovery.forms[].fields[].value (ex. __VIEWSTATE)
+
+function truncateForHistory(value, cap) {
+  const str = typeof value === "string" ? value : JSON.stringify(value);
+  if (str === undefined || str.length <= cap) return value;
+  return str.slice(0, cap) + `…[tronqué pour l'historique, ${str.length} caractères au total]`;
+}
+
+// Construit une copie de `scan` dont les champs volumineux et jamais affichés tels quels
+// (body/body_snippet d'evidence, valeurs de champs de formulaire crawlés) sont bornés,
+// pour éviter de saturer le quota de chrome.storage.local sur 50 scans glissants.
+function sanitizeScanForHistory(scan) {
+  const sanitized = { ...scan };
+
+  if (Array.isArray(sanitized.vulnerabilities)) {
+    sanitized.vulnerabilities = sanitized.vulnerabilities.map(v => {
+      if (!v.evidenceRequest && !v.evidenceResponse) return v;
+      const out = { ...v };
+      if (out.evidenceRequest && out.evidenceRequest.body != null) {
+        out.evidenceRequest = {
+          ...out.evidenceRequest,
+          body: truncateForHistory(out.evidenceRequest.body, HISTORY_EVIDENCE_BODY_CAP),
+        };
+      }
+      if (out.evidenceResponse && typeof out.evidenceResponse.body_snippet === "string") {
+        out.evidenceResponse = {
+          ...out.evidenceResponse,
+          body_snippet: truncateForHistory(out.evidenceResponse.body_snippet, HISTORY_EVIDENCE_BODY_CAP),
+        };
+      }
+      return out;
+    });
+  }
+
+  if (sanitized.discovery && Array.isArray(sanitized.discovery.forms)) {
+    sanitized.discovery = {
+      ...sanitized.discovery,
+      forms: sanitized.discovery.forms.map(f => ({
+        ...f,
+        fields: Array.isArray(f.fields)
+          ? f.fields.map(fd =>
+              typeof fd.value === "string" && fd.value.length > HISTORY_FORM_VALUE_CAP
+                ? { ...fd, value: truncateForHistory(fd.value, HISTORY_FORM_VALUE_CAP) }
+                : fd
+            )
+          : f.fields,
+      })),
+    };
+  }
+
+  return sanitized;
+}
+
 async function saveScanToHistory(scan) {
   try {
     const { config, scanHistory } = await chrome.storage.local.get(["config", "scanHistory"]);
     const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
     const history = scanHistory || [];
-    history.unshift(scan);
+    history.unshift(sanitizeScanForHistory(scan));
     const trimmed = history.slice(0, cfg.maxHistoryItems);
     await chrome.storage.local.set({ scanHistory: trimmed });
-
-    // Push asynchrone vers SQLite backend — best-effort
-    pushScanToBackend(scan).catch(e => console.warn("[VulnScan] Backend history KO:", e.message));
   } catch (err) {
-    console.error("[VulnScan] Erreur sauvegarde :", err);
+    console.error("[VulnScan] Erreur sauvegarde locale :", err);
   }
+
+  // Push vers SQLite backend — best-effort et indépendant de la sauvegarde locale
+  // ci-dessus : un échec de quota local ne doit jamais empêcher ce push (et inversement),
+  // sans quoi les findings de ce scan ne pourraient plus jamais être triés (SET_TRIAGE
+  // PATCH-erait un finding_id que SQLite n'a jamais vu). On pousse `scan` non tronqué :
+  // le backend n'a pas la contrainte de quota de chrome.storage.local.
+  pushScanToBackend(scan).catch(e => console.warn("[VulnScan] Backend history KO:", e.message));
 }
 
 async function fetchHistoryFromBackend() {
