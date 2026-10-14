@@ -19,8 +19,10 @@ Le `context` est le dictionnaire passé par l'engine. Il peut contenir :
 """
 from __future__ import annotations
 from typing import Dict, Any, Optional
+from urllib.parse import urlparse
 import requests
 import logging
+import threading
 import time
 
 logger = logging.getLogger("vulnscan.http")
@@ -29,6 +31,9 @@ DEFAULT_TIMEOUT = 8
 DEFAULT_UA = "VulnScan/1.4 (security-audit)"
 MAX_BODY_SNIPPET = 4096
 SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie"}
+
+_rate_lock = threading.Lock()
+_last_request_at: Dict[str, float] = {}
 
 
 def _merged_kwargs(context: Optional[Dict[str, Any]], kwargs: dict) -> dict:
@@ -105,6 +110,26 @@ def _build_evidence(method, url, opts, response, elapsed_ms):
     return req_ev, resp_ev
 
 
+def _throttle(url, context):
+    """Respecte un débit max par hostname (context["rate_limit_per_sec"], défaut 10).
+
+    Bloque (time.sleep) si nécessaire pour que deux requêtes consécutives vers le même
+    hostname soient séparées d'au moins `1 / rate` secondes. Des hostnames différents ne
+    s'attendent jamais entre eux.
+    """
+    rate = (context or {}).get("rate_limit_per_sec") or 10
+    if rate <= 0:
+        return
+    min_interval = 1.0 / rate
+    host = urlparse(url).hostname or ""
+    with _rate_lock:
+        now = time.monotonic()
+        wait = min_interval - (now - _last_request_at.get(host, 0.0))
+        if wait > 0:
+            time.sleep(wait)
+        _last_request_at[host] = time.monotonic()
+
+
 def send(method: str,
          url: str,
          context: Optional[Dict[str, Any]] = None,
@@ -116,6 +141,7 @@ def send(method: str,
     Si capture=True : retourne un triplet (response_ou_none, evidence_request_ou_none, evidence_response_ou_none).
     L'evidence ne contient jamais de secret en clair (headers sensibles redactés, tuple Basic Auth jamais lu).
     """
+    _throttle(url, context)
     opts = _merged_kwargs(context, kwargs)
     try:
         start = time.monotonic()

@@ -307,7 +307,7 @@ async function runActiveModules(cfg, url) {
       body: JSON.stringify({
         target: url,
         enabled,
-        context: auth ? { auth } : {},
+        context: { ...(auth ? { auth } : {}), rate_limit_per_sec: cfg.requestsPerSecond },
       }),
       signal: AbortSignal.timeout(60000),  // 60s — les tests actifs peuvent être longs
     });
