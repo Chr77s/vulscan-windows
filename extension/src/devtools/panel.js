@@ -1498,7 +1498,7 @@ function sarifLevelFor(severity) {
 function buildSARIF(scan) {
   return JSON.stringify({
     version: "2.1.0",
-    $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+    $schema: "https://json.schemastore.org/sarif-2.1.0.json",
     runs: [{
       tool: {
         driver: {
@@ -1517,7 +1517,7 @@ function buildSARIF(scan) {
             artifactLocation: { uri: v.url || scan.url || "" },
           },
         }],
-        ...(v.remediationSnippet ? { fixes: [{ description: { text: v.remediationSnippet } }] } : {}),
+        ...(v.remediationSnippet ? { properties: { remediationSnippet: v.remediationSnippet } } : {}),
       })),
     }],
   }, null, 2);
