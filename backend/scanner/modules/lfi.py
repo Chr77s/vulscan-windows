@@ -12,9 +12,9 @@ Recommandation OWASP A03 / CWE-22.
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -55,7 +55,9 @@ class LfiModule(ScannerModule):
 
         # 1. Détection passive : recherche d'erreurs include/require dans la réponse baseline
         try:
-            r_base = requests.get(target, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+            r_base = http.get(target, context, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+            if r_base is None:
+                return findings
             for pattern, label in self.SIGNATURES_GENERIC:
                 if pattern.search(r_base.text):
                     findings.append(Finding(
@@ -85,7 +87,10 @@ class LfiModule(ScannerModule):
                     new_params = dict(params)
                     new_params[param_name] = payload
                     test_url = urlunparse(parsed._replace(query=urlencode(new_params)))
-                    r = requests.get(test_url, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+                    r, req_ev, resp_ev = http.get(test_url, context, capture=True, timeout=8,
+                                                   headers={"User-Agent": "VulnScan/1.2"})
+                    if r is None:
+                        continue
                     if re.search(sig_pattern, r.text):
                         findings.append(Finding(
                             type="path-traversal", severity="critical",
@@ -107,6 +112,7 @@ class LfiModule(ScannerModule):
                             cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
                             detection_method="payload-injection",
                             source="module:lfi",
+                            evidence_request=req_ev, evidence_response=resp_ev,
                         ))
                         break  # une seule preuve par param suffit
                 except Exception:

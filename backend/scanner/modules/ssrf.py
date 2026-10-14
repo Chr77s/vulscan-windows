@@ -13,10 +13,10 @@ OWASP A10:2021 / CWE-918.
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-import requests
 import difflib
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 from scanner.core.oob import OOBCanary
 
@@ -54,7 +54,9 @@ class SsrfModule(ScannerModule):
         params = dict(parse_qsl(parsed.query))
 
         try:
-            r_base = requests.get(target, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+            r_base = http.get(target, context, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+            if r_base is None:
+                return findings
             body_base = r_base.text
         except Exception:
             return findings
@@ -70,7 +72,7 @@ class SsrfModule(ScannerModule):
                 new_params = dict(params)
                 new_params[param_name] = canary.url
                 test_url = urlunparse(parsed._replace(query=urlencode(new_params)))
-                requests.get(test_url, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+                http.get(test_url, context, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
             except Exception:
                 continue
             if canary.wait_for_hit(timeout=4):
@@ -110,7 +112,10 @@ class SsrfModule(ScannerModule):
                     new_params = dict(params)
                     new_params[param_name] = payload
                     test_url = urlunparse(parsed._replace(query=urlencode(new_params)))
-                    r = requests.get(test_url, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+                    r, req_ev, resp_ev = http.get(test_url, context, capture=True, timeout=8,
+                                                   headers={"User-Agent": "VulnScan/1.2"})
+                    if r is None:
+                        continue
                     body = r.text
 
                     # Si erreur DNS/conn refused → bonne nouvelle (le serveur a essayé)
@@ -136,6 +141,7 @@ class SsrfModule(ScannerModule):
                                 cvss_base=8.6,
                                 detection_method="error-disclosure",
                                 source="module:ssrf",
+                                evidence_request=req_ev, evidence_response=resp_ev,
                             ))
                             break
                     else:
@@ -162,6 +168,7 @@ class SsrfModule(ScannerModule):
                                 cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:L/A:N",
                                 detection_method="response-diff",
                                 source="module:ssrf",
+                                evidence_request=req_ev, evidence_response=resp_ev,
                             ))
                             break
                 except Exception:

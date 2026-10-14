@@ -11,9 +11,9 @@ OWASP A05 / CWE-611.
 """
 from __future__ import annotations
 from typing import List, Dict, Any
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -42,10 +42,12 @@ class XxeModule(ScannerModule):
             return []
 
         try:
-            r = requests.post(target, data=self.PAYLOAD, timeout=8, headers={
+            r, req_ev, resp_ev = http.post(target, context, capture=True, data=self.PAYLOAD, timeout=8, headers={
                 "Content-Type": "application/xml",
                 "User-Agent": "VulnScan/1.2",
             })
+            if r is None:
+                return []
             body = r.text
         except Exception:
             return []
@@ -73,6 +75,7 @@ class XxeModule(ScannerModule):
                 cvss_base=9.8,
                 detection_method="payload-doctype",
                 source="module:xxe",
+                evidence_request=req_ev, evidence_response=resp_ev,
             ))
         elif re.search(r"xml.*(entity|doctype)", body, re.I):
             findings.append(Finding(
@@ -88,5 +91,6 @@ class XxeModule(ScannerModule):
                 cvss_base=7.5,
                 detection_method="error-signal",
                 source="module:xxe",
+                evidence_request=req_ev, evidence_response=resp_ev,
             ))
         return findings

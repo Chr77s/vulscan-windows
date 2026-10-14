@@ -82,6 +82,22 @@ def test_race_conditions_module_propagates_auth(mocker):
                                    extra_context={"crawled": {"forms": forms}})
 
 
+def test_lfi_module_propagates_auth(mocker):
+    from scanner.modules.lfi import LfiModule
+    assert_module_propagates_auth(mocker, LfiModule, "http://example.com/?file=a")
+
+
+def test_ssrf_module_propagates_auth(mocker):
+    from scanner.modules.ssrf import SsrfModule
+    mocker.patch("scanner.core.oob.OOBCanary.new").return_value.wait_for_hit.return_value = False
+    assert_module_propagates_auth(mocker, SsrfModule, "http://example.com/?url=http://x")
+
+
+def test_xxe_module_propagates_auth(mocker):
+    from scanner.modules.xxe import XxeModule
+    assert_module_propagates_auth(mocker, XxeModule, "http://example.com/api/xml")
+
+
 def test_subdomain_enum_never_sends_auth_header_to_crtsh(mocker):
     """subdomain_enum ne passe par scanner.core.http pour rien (aucun HTTP vers la cible) ;
     son unique appel réseau (crt.sh, service tiers) ne doit jamais recevoir le Bearer/cookie

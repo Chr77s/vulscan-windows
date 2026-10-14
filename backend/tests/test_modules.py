@@ -74,6 +74,18 @@ def test_finding_to_dict_evidence_defaults_to_none():
     assert d["evidenceResponse"] is None
 
 
+def test_lfi_confirmed_finding_has_evidence_request_response(mocker):
+    from scanner.modules.lfi import LfiModule
+    baseline = mocker.Mock(status_code=200, headers={}, text="nothing interesting")
+    confirming = mocker.Mock(status_code=200, headers={}, text="root:x:0:0:root:/root:/bin/bash")
+    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [confirming] * 20)
+    findings = LfiModule().scan("http://example.com/?file=a", {})
+    confirmed = [f for f in findings if f.severity == "critical"]
+    assert confirmed, "aucune LFI confirmée avec une réponse contenant /etc/passwd"
+    assert confirmed[0].evidence_request is not None
+    assert confirmed[0].evidence_response["body_snippet"].startswith("root:x:0:0")
+
+
 def test_lfi_signatures():
     """La regex root:x:0:0 doit matcher un /etc/passwd typique."""
     from scanner.modules.lfi import LfiModule
