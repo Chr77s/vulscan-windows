@@ -423,6 +423,7 @@ async function augmentViaBackend(cfg, url, clientResult) {
 
 function ensureFinding(f, url) {
   const base = {
+    ...f,
     id: f.id || crypto.randomUUID(),
     detectedAt: f.detectedAt || Date.now(),
     scanMode: f.scanMode || "backend",
