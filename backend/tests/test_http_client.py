@@ -72,6 +72,32 @@ def test_capture_redacts_cookie_header_and_set_cookie_response_header(mocker):
     assert req_ev["headers"]["Cookie"] == "***"
     assert resp_ev["headers"]["Set-Cookie"] == "***"
 
+def test_capture_redacts_custom_auth_header_configured_by_user(mocker):
+    """L'extension permet de configurer un header d'auth custom arbitraire (ex: X-API-Key)
+    avec une vraie valeur secrète. Même sans être sur la liste statique SENSITIVE_HEADERS,
+    tout header présent dans context['auth']['headers'] doit être redacté en evidence."""
+    from scanner.core import http
+    fake = mocker.Mock(status_code=200, headers={}, text="")
+    mocker.patch("scanner.core.http.requests.request", return_value=fake)
+    ctx = {"auth": {"headers": {"X-API-Key": "REAL-SECRET-123"}}}
+    _, req_ev, _ = http.send("GET", "http://example.com/x", context=ctx, capture=True,
+                              headers={"X-API-Key": "REAL-SECRET-123"})
+    assert req_ev["headers"]["X-API-Key"] == "***"
+    assert "REAL-SECRET-123" not in str(req_ev)
+
+def test_capture_redacts_arbitrary_custom_auth_header_name_not_on_static_list(mocker):
+    """Preuve que la redaction est dynamique (basée sur context['auth']['headers']) et pas
+    seulement sur l'extension de la liste statique : un nom de header totalement arbitraire,
+    absent de SENSITIVE_HEADERS, doit tout de même être redacté."""
+    from scanner.core import http
+    fake = mocker.Mock(status_code=200, headers={}, text="")
+    mocker.patch("scanner.core.http.requests.request", return_value=fake)
+    ctx = {"auth": {"headers": {"X-My-Custom-Secret": "REAL-SECRET-456"}}}
+    _, req_ev, _ = http.send("GET", "http://example.com/x", context=ctx, capture=True,
+                              headers={"X-My-Custom-Secret": "REAL-SECRET-456"})
+    assert req_ev["headers"]["X-My-Custom-Secret"] == "***"
+    assert "REAL-SECRET-456" not in str(req_ev)
+
 def test_capture_omits_basic_auth_tuple_from_evidence(mocker):
     from scanner.core import http
     fake = mocker.Mock(status_code=200, headers={}, text="")

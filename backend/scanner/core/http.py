@@ -30,7 +30,10 @@ logger = logging.getLogger("vulnscan.http")
 DEFAULT_TIMEOUT = 8
 DEFAULT_UA = "VulnScan/1.4 (security-audit)"
 MAX_BODY_SNIPPET = 4096
-SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie"}
+SENSITIVE_HEADERS = {
+    "authorization", "cookie", "set-cookie",
+    "proxy-authorization", "x-api-key", "x-auth-token", "x-access-token",
+}
 
 _rate_lock = threading.Lock()
 _last_request_at: Dict[str, float] = {}
@@ -72,9 +75,17 @@ def _merged_kwargs(context: Optional[Dict[str, Any]], kwargs: dict) -> dict:
     return out
 
 
-def _redact_headers(headers):
-    """Masque les en-têtes sensibles (Authorization, Cookie, Set-Cookie) avant de les exposer en evidence."""
-    return {k: ("***" if k.lower() in SENSITIVE_HEADERS else v) for k, v in (headers or {}).items()}
+def _redact_headers(headers, extra_sensitive: Optional[set] = None):
+    """Masque les en-têtes sensibles avant de les exposer en evidence.
+
+    `extra_sensitive` complète la liste statique `SENSITIVE_HEADERS` avec les noms
+    (déjà en minuscules) des headers que l'utilisateur a configurés comme auth custom
+    (`context["auth"]["headers"]`) : ils ne peuvent pas être connus à l'avance puisque
+    l'utilisateur choisit librement leur nom (ex: 'X-API-Key', mais aussi n'importe
+    quel nom arbitraire type 'X-My-Secret'), donc la liste statique seule ne suffit pas.
+    """
+    sensitive = SENSITIVE_HEADERS | (extra_sensitive or set())
+    return {k: ("***" if k.lower() in sensitive else v) for k, v in (headers or {}).items()}
 
 
 def _truncate_body(text: str, max_bytes: int) -> str:
@@ -89,21 +100,24 @@ def _truncate_body(text: str, max_bytes: int) -> str:
     return encoded.decode("utf-8", errors="ignore")
 
 
-def _build_evidence(method, url, opts, response, elapsed_ms):
+def _build_evidence(method, url, opts, response, elapsed_ms, extra_sensitive: Optional[set] = None):
     """Construit les dicts d'evidence request/response à partir des opts fusionnés et de la réponse.
 
     N'accède jamais à opts["auth"] (le tuple Basic Auth) : seuls headers/data/json sont lus ici,
     donc un éventuel secret Basic Auth ne peut pas fuiter dans l'evidence.
+
+    `extra_sensitive` (noms de header en minuscules) vient des headers auth custom définis par
+    l'utilisateur dans context["auth"]["headers"] — voir `_redact_headers`.
     """
     req_ev = {
         "method": method.upper(),
         "url": url,
-        "headers": _redact_headers(opts.get("headers")),
+        "headers": _redact_headers(opts.get("headers"), extra_sensitive),
         "body": opts.get("data") if opts.get("data") is not None else opts.get("json"),
     }
     resp_ev = {
         "status": response.status_code,
-        "headers": _redact_headers(dict(response.headers)),
+        "headers": _redact_headers(dict(response.headers), extra_sensitive),
         "body_snippet": _truncate_body(response.text, MAX_BODY_SNIPPET),
         "elapsed_ms": round(elapsed_ms, 1),
     }
@@ -152,7 +166,14 @@ def send(method: str,
         return (None, None, None) if capture else None
 
     if capture:
-        return response, *_build_evidence(method, url, opts, response, elapsed_ms)
+        # Les noms (pas les valeurs) des headers auth custom de l'utilisateur : son nom de
+        # header est arbitraire (ex: 'X-API-Key', 'X-My-Secret'...) donc on ne peut pas le
+        # connaître statiquement — on redacte dynamiquement tout header présent ici, qu'il
+        # soit ou non sur la liste statique SENSITIVE_HEADERS.
+        auth_headers = ((context or {}).get("auth") or {}).get("headers") or {}
+        auth_header_names = {k.lower() for k in auth_headers.keys()}
+        return response, *_build_evidence(method, url, opts, response, elapsed_ms,
+                                           extra_sensitive=auth_header_names)
     return response
 
 
