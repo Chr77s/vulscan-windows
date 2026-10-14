@@ -228,11 +228,11 @@ export function enrichFinding(v) {
   return {
     ...v,
     title:       v.title       || tax.title,
-    owasp:       v.owasp       || tax.owasp,
-    cwe:         v.cwe         || tax.cwe,
+    owasp:       (v.owasp && v.owasp.name) ? v.owasp : (tax.owasp || v.owasp),
+    cwe:         (v.cwe && v.cwe.name)     ? v.cwe   : (tax.cwe   || v.cwe),
     cvssBase:    v.cvssBase    ?? tax.cvssBase,
     cvssVector:  v.cvssVector  || tax.cvssVector,
     impact:      v.impact      || tax.impact,
-    references:  v.references  || tax.references || [],
+    references:  (v.references && v.references.length) ? v.references : (tax.references || []),
   };
 }
