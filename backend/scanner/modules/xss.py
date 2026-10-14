@@ -13,10 +13,11 @@ ce qui ne casse rien et reste défensif.
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-import requests
 import secrets
 import re
 
+from scanner.core import http
+from scanner.core.matchers import HttpResult, Matcher, evaluate
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -52,13 +53,16 @@ class XssModule(ScannerModule):
             test_url = urlunparse(parsed._replace(query=urlencode(test_params)))
 
             try:
-                r = requests.get(test_url, timeout=8,
-                                 headers={"User-Agent": "VulnScan/1.2"})
-                body = r.text
+                response, req_ev, resp_ev = http.get(test_url, context, capture=True, timeout=8,
+                                                       headers={"User-Agent": "VulnScan/1.2"})
+                if response is None:
+                    continue
+                body = response.text
             except Exception:
                 continue
 
-            if marker not in body:
+            result = HttpResult(status=response.status_code, headers=dict(response.headers), body=body)
+            if not evaluate([Matcher(type="word", part="body", words=[marker])], "and", result):
                 continue  # pas réfléchi
 
             # Détecter le contexte du reflet
@@ -86,6 +90,7 @@ class XssModule(ScannerModule):
                 cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
                 detection_method="reflection-marker",
                 source="module:xss",
+                evidence_request=req_ev, evidence_response=resp_ev,
             ))
         return findings
 

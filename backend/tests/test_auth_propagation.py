@@ -118,6 +118,11 @@ def test_sqli_module_propagates_auth(mocker):
     assert_module_propagates_auth(mocker, SqliModule, "http://example.com/?id=5")
 
 
+def test_xss_module_propagates_auth(mocker):
+    from scanner.modules.xss import XssModule
+    assert_module_propagates_auth(mocker, XssModule, "http://example.com/?q=hi")
+
+
 def test_subdomain_enum_never_sends_auth_header_to_crtsh(mocker):
     """subdomain_enum ne passe par scanner.core.http pour rien (aucun HTTP vers la cible) ;
     son unique appel réseau (crt.sh, service tiers) ne doit jamais recevoir le Bearer/cookie

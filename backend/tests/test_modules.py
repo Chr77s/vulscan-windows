@@ -147,3 +147,26 @@ def test_sqli_time_based_does_not_false_positive_on_network_jitter(mocker):
 
     findings = SqliModule().scan("http://example.com/?id=5", {})
     assert not [f for f in findings if "time-based" in (f.title or "").lower()]
+
+
+def test_xss_reflection_uses_matcher_and_captures_evidence(mocker):
+    from scanner.modules.xss import XssModule
+    import scanner.modules.xss as xss_mod
+
+    # xss.py génère son propre marqueur aléatoire et l'injecte comme valeur du paramètre ;
+    # on simule un serveur qui réfléchit systématiquement la valeur du param dans le body,
+    # et on patche http.get directement pour contrôler précisément ce que scan() reçoit.
+    def fake_get(url, ctx, capture=False, **kw):
+        reflected_value = url.split("=")[-1]
+        response = mocker.Mock(status_code=200, headers={}, text=f"<p>{reflected_value}</p>")
+        if capture:
+            req_ev = {"method": "GET", "url": url, "headers": {}, "body": None}
+            resp_ev = {"status": 200, "headers": {}, "body_snippet": response.text, "elapsed_ms": 5.0}
+            return response, req_ev, resp_ev
+        return response
+
+    mocker.patch.object(xss_mod.http, "get", side_effect=fake_get)
+    findings = XssModule().scan("http://example.com/?q=hi", {})
+    assert findings
+    assert findings[0].evidence_request is not None
+    assert findings[0].evidence_response is not None
