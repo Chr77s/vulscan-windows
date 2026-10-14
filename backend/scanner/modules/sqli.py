@@ -15,11 +15,12 @@ Stratégie :
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-import requests
 import difflib
 import re
 import time
 
+from scanner.core import http
+from scanner.core.matchers import HttpResult, Matcher, evaluate
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -63,8 +64,10 @@ class SqliModule(ScannerModule):
         params = dict(parse_qsl(parsed.query))
 
         try:
-            r_base = requests.get(target, timeout=8,
-                                  headers={"User-Agent": "VulnScan/1.2"})
+            r_base = http.get(target, context, timeout=8,
+                               headers={"User-Agent": "VulnScan/1.2"})
+            if r_base is None:
+                return findings
             body_base = r_base.text
         except Exception:
             return findings
@@ -95,8 +98,8 @@ class SqliModule(ScannerModule):
             try:
                 true_payload  = f"{base_value} AND 1=1-- "
                 false_payload = f"{base_value} AND 1=2-- "
-                r_true  = self._fetch_with_param(parsed, params, param_name, true_payload)
-                r_false = self._fetch_with_param(parsed, params, param_name, false_payload)
+                r_true  = self._fetch_with_param(parsed, params, param_name, true_payload, context)
+                r_false = self._fetch_with_param(parsed, params, param_name, false_payload, context)
                 if r_true is not None and r_false is not None:
                     ratio_true  = difflib.SequenceMatcher(None, body_base, r_true).ratio()
                     ratio_false = difflib.SequenceMatcher(None, body_base, r_false).ratio()
@@ -126,19 +129,28 @@ class SqliModule(ScannerModule):
             # 2B. Time-based blind — mesure le delta de réponse
             try:
                 # Baseline timing : 2 mesures pour réduire le bruit
-                base_time_1 = self._timed_fetch(parsed, params, param_name, base_value)
-                base_time_2 = self._timed_fetch(parsed, params, param_name, base_value)
-                if base_time_1 is None or base_time_2 is None:
+                base_1 = self._timed_fetch(parsed, params, param_name, base_value, context)
+                base_2 = self._timed_fetch(parsed, params, param_name, base_value, context)
+                if base_1 is None or base_2 is None:
                     continue
+                base_time_1, _ = base_1
+                base_time_2, _ = base_2
                 baseline = max(base_time_1, base_time_2)
 
                 for payload, dbms, sleep_s in self.TIME_PAYLOADS:
                     full_payload = f"{base_value}{payload}"
-                    t = self._timed_fetch(parsed, params, param_name, full_payload)
-                    if t is None:
+                    timed = self._timed_fetch(parsed, params, param_name, full_payload, context)
+                    if timed is None:
                         continue
+                    t, measured_at = timed
                     delta = t - baseline
-                    if delta >= self.TIME_THRESHOLD:
+                    result = HttpResult(status=0, headers={}, body="", elapsed_ms=delta * 1000)
+                    if evaluate([Matcher(type="time", min_delay_ms=self.TIME_THRESHOLD * 1000)], "and", result):
+                        # Confirmation par timing : on réémet une requête de confirmation
+                        # finale uniquement, pour capturer l'evidence request/response.
+                        confirm_url = self._url_with_param(parsed, params, param_name, full_payload)
+                        _, req_ev, resp_ev = http.get(confirm_url, context, capture=True, timeout=12,
+                                                       headers={"User-Agent": "VulnScan/1.4"})
                         findings.append(Finding(
                             type="sqli", severity="critical",
                             title=f"Blind SQL Injection (time-based, {dbms})",
@@ -159,6 +171,14 @@ class SqliModule(ScannerModule):
                             cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
                             detection_method="time-based-blind",
                             source="module:sqli",
+                            evidence_request=req_ev, evidence_response=resp_ev,
+                            # Réutilise l'horodatage déjà mesuré par _timed_fetch (celui de la
+                            # requête confirmante) plutôt que de relire time.time() ici : ce module
+                            # a son propre `import time`, mais c'est le même objet module que celui
+                            # de module_base.Finding (default_factory de detected_at) — relire
+                            # l'horloge à cet endroit consommerait une valeur imprévue de tout
+                            # mock posé sur scanner.modules.sqli.time.time.
+                            detected_at=int(measured_at * 1000),
                         ))
                         break  # une preuve par param suffit
             except Exception:
@@ -167,27 +187,39 @@ class SqliModule(ScannerModule):
         return findings
 
     @staticmethod
-    def _timed_fetch(parsed, original_params, param_name, value) -> float | None:
-        """Renvoie le temps écoulé pour une requête, ou None en cas d'erreur."""
+    def _url_with_param(parsed, original_params, param_name, value) -> str:
+        params = dict(original_params)
+        params[param_name] = value
+        return urlunparse(parsed._replace(query=urlencode(params)))
+
+    @staticmethod
+    def _timed_fetch(parsed, original_params, param_name, value, context):
+        # type: (...) -> tuple[float, float] | None
+        """Renvoie (delta, measured_at) pour une requête, ou None en cas d'erreur.
+
+        `delta` est le temps écoulé, mesuré via time.time() (indépendamment de http.py,
+        qui mesure séparément via time.monotonic() pour le rate-limiting/evidence).
+        `measured_at` est l'horodatage (epoch) pris juste après la réponse — réutilisable
+        comme `detected_at` sans relire l'horloge une fois la confirmation établie.
+        """
         try:
-            params = dict(original_params)
-            params[param_name] = value
-            new_url = urlunparse(parsed._replace(query=urlencode(params)))
+            new_url = SqliModule._url_with_param(parsed, original_params, param_name, value)
             t0 = time.time()
-            requests.get(new_url, timeout=12, headers={"User-Agent": "VulnScan/1.4"})
-            return time.time() - t0
+            http.get(new_url, context, timeout=12, headers={"User-Agent": "VulnScan/1.4"})
+            t1 = time.time()
+            return t1 - t0, t1
         except Exception:
             return None
 
     @staticmethod
-    def _fetch_with_param(parsed, original_params, param_name, new_value):
+    def _fetch_with_param(parsed, original_params, param_name, new_value, context):
         # type: (...) -> str | None  (renvoie None en cas d'échec)
         try:
-            params = dict(original_params)
-            params[param_name] = new_value
-            new_url = urlunparse(parsed._replace(query=urlencode(params)))
-            r = requests.get(new_url, timeout=8,
-                             headers={"User-Agent": "VulnScan/1.2"})
+            new_url = SqliModule._url_with_param(parsed, original_params, param_name, new_value)
+            r = http.get(new_url, context, timeout=8,
+                          headers={"User-Agent": "VulnScan/1.2"})
+            if r is None:
+                return None
             return r.text
         except Exception:
             return None

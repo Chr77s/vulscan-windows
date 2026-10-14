@@ -105,3 +105,45 @@ def test_lfi_signatures():
             matched = True
             break
     assert matched
+
+
+def test_sqli_time_based_uses_matcher_and_captures_evidence(mocker):
+    from scanner.modules.sqli import SqliModule
+    fast = mocker.Mock(status_code=200, headers={}, text="")
+    mocker.patch("scanner.core.http.requests.request", return_value=fast)
+    mocker.patch("scanner.core.http.time.sleep")  # désactive le rate-limiter réel pour ce test
+    # sqli.py mesure ses propres deltas via son `import time` (time.time()), pas via http.py.
+    # _timed_fetch lit time.time() 2 fois (avant/après) par appel : base_time_1, base_time_2,
+    # puis 1 fois pour le 1er payload de TIME_PAYLOADS (qui confirme et interrompt la boucle) :
+    #   base_time_1: t0=0.0, t1=0.05   -> 0.05s
+    #   base_time_2: t0=1.0, t1=1.05   -> 0.05s  => baseline = max(...) = 0.05
+    #   1er payload: t0=2.0, t1=6.6    -> 4.6s   => delta = 4.6 - 0.05 = 4.55 >= 3.5 -> confirmé
+    time_values = iter([0.0, 0.05, 1.0, 1.05, 2.0, 6.6])
+    mocker.patch("scanner.modules.sqli.time.time", side_effect=lambda: next(time_values))
+
+    findings = SqliModule().scan("http://example.com/?id=5", {})
+    time_based = [f for f in findings if "time-based" in (f.title or "").lower()]
+    assert time_based, "aucune SQLi time-based détectée malgré un delta de 4.55s"
+    assert time_based[0].evidence_request is not None
+    assert time_based[0].evidence_response is not None
+
+
+def test_sqli_time_based_does_not_false_positive_on_network_jitter(mocker):
+    from scanner.modules.sqli import SqliModule
+    fast = mocker.Mock(status_code=200, headers={}, text="")
+    mocker.patch("scanner.core.http.requests.request", return_value=fast)
+    mocker.patch("scanner.core.http.time.sleep")
+    # Baseline déjà lente (0.4s) ; chacun des 4 TIME_PAYLOADS n'ajoute que 0.3s de plus
+    # (delta=0.3 < 3.5 à chaque fois) -> aucune confirmation, la boucle va jusqu'au bout.
+    time_values = iter([
+        0.0, 0.4,   # base_time_1 = 0.4s
+        1.0, 1.4,   # base_time_2 = 0.4s  => baseline = 0.4
+        2.0, 2.7,   # payload 1 : 0.7s, delta=0.3
+        3.0, 3.7,   # payload 2 : 0.7s, delta=0.3
+        4.0, 4.7,   # payload 3 : 0.7s, delta=0.3
+        5.0, 5.7,   # payload 4 : 0.7s, delta=0.3
+    ])
+    mocker.patch("scanner.modules.sqli.time.time", side_effect=lambda: next(time_values))
+
+    findings = SqliModule().scan("http://example.com/?id=5", {})
+    assert not [f for f in findings if "time-based" in (f.title or "").lower()]
