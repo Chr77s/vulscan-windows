@@ -72,3 +72,27 @@ def test_tech_fingerprint_module_propagates_auth(mocker):
 def test_waf_detect_module_propagates_auth(mocker):
     from scanner.modules.waf_detect import WafDetectModule
     assert_module_propagates_auth(mocker, WafDetectModule, "http://example.com/")
+
+
+def test_race_conditions_module_propagates_auth(mocker):
+    from scanner.modules.race_conditions import RaceConditionsModule
+    forms = [{"action": "http://example.com/vote", "method": "POST",
+              "fields": [{"name": "choice", "type": "text", "value": "1"}], "id": ""}]
+    assert_module_propagates_auth(mocker, RaceConditionsModule, "http://example.com/",
+                                   extra_context={"crawled": {"forms": forms}})
+
+
+def test_subdomain_enum_never_sends_auth_header_to_crtsh(mocker):
+    """subdomain_enum ne passe par scanner.core.http pour rien (aucun HTTP vers la cible) ;
+    son unique appel réseau (crt.sh, service tiers) ne doit jamais recevoir le Bearer/cookie
+    de la cible — comportement déjà correct aujourd'hui, ce test le fige."""
+    from scanner.modules.subdomain_enum import SubdomainEnumModule
+    mocker.patch("socket.gethostbyname", side_effect=OSError("no DNS in tests"))
+    fake = mocker.Mock(ok=True, json=lambda: [])
+    mock_via_http_module = mocker.patch("scanner.core.http.requests.request")
+    mock_crtsh = mocker.patch("scanner.modules.subdomain_enum.requests.get", return_value=fake)
+    ctx = {"auth": {"headers": {"Authorization": "Bearer SHOULD-NOT-LEAK"}}}
+    SubdomainEnumModule().scan("http://example.com/", ctx)
+    mock_via_http_module.assert_not_called()
+    assert mock_crtsh.called
+    assert "Authorization" not in (mock_crtsh.call_args.kwargs.get("headers") or {})

@@ -21,9 +21,9 @@ qu'une seule devrait, ou si la réponse contient un compteur supérieur à 1
 from __future__ import annotations
 from typing import List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -66,34 +66,27 @@ class RaceConditionsModule(ScannerModule):
             return []
 
         findings: List[Finding] = []
-        auth = context.get("auth") or {}
         for form in candidate_forms[:self.MAX_FORMS]:
-            findings.extend(self._test_race(form, auth))
+            findings.extend(self._test_race(form, context))
         return findings
 
-    def _test_race(self, form: Dict[str, Any], auth: Dict[str, Any]) -> List[Finding]:
+    def _test_race(self, form: Dict[str, Any], context: Dict[str, Any]) -> List[Finding]:
         action = form["action"]
         data = {f["name"]: f.get("value") or "1" for f in form["fields"]}
 
-        cookies = auth.get("cookies", {})
-        headers = {"User-Agent": "VulnScan/1.5"}
-        headers.update(auth.get("headers", {}))
-
         # 1. Référence — 1 seule requête
-        try:
-            r_solo = requests.post(action, data=data, cookies=cookies, headers=headers, timeout=8)
-            solo_status = r_solo.status_code
-            solo_body = r_solo.text[:500]
-        except Exception:
+        r_solo = http.post(action, context, data=data, timeout=8)
+        if r_solo is None:
             return []
+        solo_status = r_solo.status_code
+        solo_body = r_solo.text[:500]
 
         # 2. Burst — N requêtes en parallèle
         def _one_request():
-            try:
-                r = requests.post(action, data=data, cookies=cookies, headers=headers, timeout=8)
-                return r.status_code, r.text
-            except Exception:
+            r = http.post(action, context, data=data, timeout=8)
+            if r is None:
                 return 0, ""
+            return r.status_code, r.text
 
         results = []
         with ThreadPoolExecutor(max_workers=self.BURST_SIZE) as pool:
