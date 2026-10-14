@@ -100,6 +100,32 @@ async function handleMessage(message) {
       const scan = history.find(s => s.id === scanId) || history[0] || null;
       return { success: !!scan, scan };
     }
+    case "SET_TRIAGE": {
+      const { scanId, findingId, status, note } = message.payload || {};
+      const { config } = await chrome.storage.local.get("config");
+      const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
+      try {
+        const r = await fetch(`${cfg.backendUrl}/history/triage/${findingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status, note }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!r.ok) return { success: false, error: "HTTP " + r.status };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+      const { scanHistory } = await chrome.storage.local.get("scanHistory");
+      const history = scanHistory || [];
+      const scan = history.find(s => s.id === scanId);
+      const finding = scan && scan.vulnerabilities.find(v => v.id === findingId);
+      if (finding) {
+        finding.triageStatus = status;
+        finding.triageNote = note || "";
+        await chrome.storage.local.set({ scanHistory: history });
+      }
+      return { success: true };
+    }
     default:
       return { error: "Type de message inconnu : " + message.type };
   }
