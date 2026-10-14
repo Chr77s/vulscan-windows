@@ -17,11 +17,14 @@ class SstiModule(ScannerModule):
     SUSPECT_PARAMS = {"name", "search", "q", "query", "page", "template", "view",
                       "title", "message", "comment", "text", "content"}
 
+    # 1337*7331 plutôt que 7*7 : "49" apparaît trop souvent par coïncidence (prix "$49.99",
+    # jeton CSRF, âge affiché...) — mesuré à 36% de faux positifs en revue. Un produit à
+    # 7 chiffres ("9801547") a une probabilité de collision fortuite négligeable.
     PROBES = [
-        ("{{7*7}}", "Jinja2/Twig", "49"),
-        ("${7*7}",  "Freemarker/Velocity", "49"),
-        ("#{7*7}",  "Thymeleaf (SpEL)", "49"),
-        ("*{7*7}",  "Thymeleaf (alt)", "49"),
+        ("{{1337*7331}}", "Jinja2/Twig", "9801547"),
+        ("${1337*7331}",  "Freemarker/Velocity", "9801547"),
+        ("#{1337*7331}",  "Thymeleaf (SpEL)", "9801547"),
+        ("*{1337*7331}",  "Thymeleaf (alt)", "9801547"),
     ]
 
     def scan(self, target: str, context: Dict[str, Any]) -> List[Finding]:
