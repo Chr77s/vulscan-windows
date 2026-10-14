@@ -221,13 +221,18 @@ async function doExport(format) {
     return;
   }
 
+  // Exclut les faux positifs (triagés depuis le panel DevTools — la popup n'a
+  // pas de boutons de triage ni de place dans son footer pour une case à
+  // cocher "Inclure les faux positifs" comme le panel ; voir Round 8 Task 1).
+  const vulnsToExport = data.filter(v => v.triageStatus !== "false_positive");
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const scan = {
     id: currentScanId || crypto.randomUUID(),
     url: tab?.url || "",
     startedAt: data[0]?.detectedAt || Date.now(),
     finishedAt: Date.now(),
-    vulnerabilities: data,
+    vulnerabilities: vulnsToExport,
   };
 
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
