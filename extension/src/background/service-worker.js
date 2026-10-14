@@ -100,10 +100,13 @@ async function handleMessage(message) {
       const scan = history.find(s => s.id === scanId) || history[0] || null;
       return { success: !!scan, scan };
     }
-    case "GET_LEGACY_ENABLED_MODULES": {
+    case "GET_ENABLED_MODULES": {
+      // Même fusion DEFAULT_CONFIG + config stockée que startScan(), et même
+      // fonction que runActiveModules() : l'onglet Modules affiche exactement
+      // ce que le prochain scan exécutera, quel que soit le profil actif.
       const { config } = await chrome.storage.local.get("config");
       const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
-      return computeLegacyEnabledModules(cfg);
+      return resolveEnabledModules(cfg);
     }
     case "SET_TRIAGE": {
       const { scanId, findingId, status, note } = message.payload || {};
@@ -312,11 +315,9 @@ const CONFIG_TO_MODULES = {
   testOpenRedirect:  "open-redirect",
 };
 
-// Calcule l'ensemble de modules réellement actifs dans le comportement LEGACY
-// (celui appliqué quand cfg.customModules n'a jamais été configuré) : les 5
-// anciennes cases cochées + la liste fixe historique. Fix 2 (final-fix-wave) :
-// source de vérité UNIQUE, partagée entre runActiveModules() (exécution réelle)
-// et le message GET_LEGACY_ENABLED_MODULES (affichage du panel, onglet Modules).
+// Calcule l'ensemble de modules du comportement LEGACY (profil "custom" dont
+// cfg.customModules n'a jamais été configuré) : les 5 anciennes cases cochées
+// + la liste fixe historique. N'est appelée que par resolveEnabledModules().
 function computeLegacyEnabledModules(cfg) {
   const enabled = [];
   for (const [key, moduleName] of Object.entries(CONFIG_TO_MODULES)) {
@@ -329,23 +330,29 @@ function computeLegacyEnabledModules(cfg) {
   return enabled;
 }
 
-async function runActiveModules(cfg, url) {
-  let enabled = [];
-
-  // Si profile sélectionné (sauf custom), on utilise le preset
+// Source de vérité UNIQUE de « quels modules actifs tournent » pour TOUS les cas,
+// partagée entre runActiveModules() (exécution réelle) et le message
+// GET_ENABLED_MODULES (affichage de l'onglet Modules du panel) :
+//   (a) profil preset (quick/standard/deep/owasp/api — absent => "standard")
+//       -> la liste SCAN_PROFILES[profil] ;
+//   (b) profil "custom" + customModules configuré (tableau, éventuellement [])
+//       -> ce tableau tel quel ;
+//   (c) profil "custom" + customModules null/absent (jamais configuré)
+//       -> l'ensemble legacy (computeLegacyEnabledModules).
+// Un profil inconnu (ni preset ni "custom") retombe sur (b)/(c), comme avant.
+function resolveEnabledModules(cfg) {
   const profile = cfg.scanProfile || "standard";
   if (profile !== "custom" && SCAN_PROFILES[profile]) {
-    enabled = [...SCAN_PROFILES[profile]];
-  } else {
-    // Custom : on prend les modules selon la sélection fine (Round 7) ou,
-    // si jamais configurée, selon les cases cochées historiques.
-    if (cfg.customModules !== null && cfg.customModules !== undefined) {
-      enabled = [...cfg.customModules];
-    } else {
-      // legacy fallback — unchanged from before this task
-      enabled = computeLegacyEnabledModules(cfg);
-    }
+    return [...SCAN_PROFILES[profile]];
   }
+  if (cfg.customModules !== null && cfg.customModules !== undefined) {
+    return [...cfg.customModules];
+  }
+  return computeLegacyEnabledModules(cfg);
+}
+
+async function runActiveModules(cfg, url) {
+  const enabled = resolveEnabledModules(cfg);
 
   if (enabled.length === 0) return { findings: [], discovery: null, moduleLog: [] };
 

@@ -1125,12 +1125,14 @@ function buildSurfaceFormsHtml(forms) {
 
 // =====================================================
 // MODULES (sélecteur fin des modules de scan actif — Round 7).
-// Remplace le profil "Custom" historique à 5 cases (Options) : cfg.customModules
-// null/absent = jamais configuré -> affichage calqué sur ce que le comportement
-// legacy exécute RÉELLEMENT aujourd'hui (les 5 cases historiques + la liste fixe
-// — voir computeLegacyEnabledModules() côté service-worker, demandé via le
-// message GET_LEGACY_ENABLED_MODULES pour éviter toute divergence d'affichage) ;
-// [] = configuré explicitement à zéro module.
+// Remplace le profil "Custom" historique à 5 cases (Options). Les cases cochées
+// reflètent ce que le prochain scan exécutera RÉELLEMENT, pour tous les profils :
+// preset (quick/standard/deep/owasp/api, "standard" par défaut) -> sa liste ;
+// "custom" + cfg.customModules tableau (éventuellement [] = zéro module) -> ce
+// tableau ; "custom" + cfg.customModules null/absent -> l'ensemble legacy (5 cases
+// historiques + liste fixe). Calcul fait UNE seule fois, côté service-worker, par
+// resolveEnabledModules() — demandé via le message GET_ENABLED_MODULES, la même
+// fonction qu'utilise runActiveModules(), pour éviter toute divergence d'affichage.
 // Les métadonnées viennent de GET /scanner/modules (backend interne, pas de
 // données issues de la cible scannée) — escapeHtml() par prudence quand même.
 //
@@ -1169,21 +1171,27 @@ async function renderModuleList() {
     return;
   }
 
-  // null -> jamais configuré : on affiche exactement l'ensemble legacy réel
-  // (celui que runActiveModules() utiliserait aujourd'hui), pas "tout coché" —
-  // sans pour autant écrire quoi que ce soit dans cfg.customModules.
-  let activeSet;
-  if (Array.isArray(cfg.customModules)) {
-    activeSet = new Set(cfg.customModules);
-  } else {
-    let legacyEnabled = [];
-    try {
-      legacyEnabled = await chrome.runtime.sendMessage({ type: "GET_LEGACY_ENABLED_MODULES" }) || [];
-    } catch {
-      legacyEnabled = [];
-    }
-    activeSet = new Set(legacyEnabled);
+  // Cases cochées = exactement ce que le prochain scan exécutera, quel que soit
+  // le profil actif (preset, custom configuré, ou custom jamais configuré) :
+  // GET_ENABLED_MODULES appelle resolveEnabledModules(), la même fonction que
+  // runActiveModules() côté service-worker. Rien n'est écrit dans la config ici.
+  // Garde : si la réponse n'est pas un vrai tableau (ex. {error: ...} renvoyé
+  // par le routeur de messages, ou sendMessage qui rejette), on n'appelle pas
+  // new Set() dessus — on affiche l'erreur au lieu d'un faux état coché.
+  let enabledModules;
+  let enabledError = null;
+  try {
+    enabledModules = await chrome.runtime.sendMessage({ type: "GET_ENABLED_MODULES" });
+  } catch (e) {
+    enabledError = e.message;
   }
+  if (!Array.isArray(enabledModules)) {
+    const reason = enabledError || enabledModules?.error || "réponse invalide";
+    console.warn("[VulnScan] GET_ENABLED_MODULES invalide :", reason);
+    container.innerHTML = `<div class="empty"><div class="empty-icon">⚙</div><div>Impossible de déterminer les modules actifs (${escapeHtml(reason)}).</div></div>`;
+    return;
+  }
+  const activeSet = new Set(enabledModules);
 
   const byCategory = new Map();
   for (const m of modules) {
