@@ -14,9 +14,9 @@ vulnérable → CVE check).
 """
 from __future__ import annotations
 from typing import List, Dict, Any, Tuple
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -68,7 +68,7 @@ class TechFingerprintModule(ScannerModule):
         detected: List[Tuple[str, str]] = []  # (label, evidence)
 
         try:
-            r = requests.get(target, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+            r = http.get(target, context, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
             headers = {k.lower(): v for k, v in r.headers.items()}
             body = r.text
             set_cookie = headers.get("set-cookie", "")

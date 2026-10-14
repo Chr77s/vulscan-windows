@@ -16,9 +16,9 @@ ce qui réduit drastiquement les faux positifs.
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -60,12 +60,12 @@ class FileExposureModule(ScannerModule):
 
         for path, pattern, sev, label, cwe in self.SIGNATURES:
             try:
-                r = requests.get(base + path, timeout=5,
-                                 headers={"User-Agent": "VulnScan/1.2"},
-                                 allow_redirects=False)
+                r = http.get(base + path, context, timeout=5,
+                             headers={"User-Agent": "VulnScan/1.2"},
+                             allow_redirects=False)
             except Exception:
                 continue
-            if r.status_code != 200:
+            if r is None or r.status_code != 200:
                 continue
 
             # Vérifier signature (sur text ou bytes selon la regex)

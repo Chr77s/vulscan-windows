@@ -9,10 +9,10 @@ Rate-limited : 5 requêtes/s par défaut pour ne pas écraser la cible.
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse, urlunparse
-import requests
 import time
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 from scanner.payloads import get_payloads
 
@@ -36,9 +36,9 @@ class DirBruteforceModule(ScannerModule):
 
         # Récup' baseline 404 pour comparer
         try:
-            r_404 = requests.get(base + "/_vulnscan_does_not_exist_xyz_42",
-                                 timeout=5, headers={"User-Agent": "VulnScan/1.2"},
-                                 allow_redirects=False)
+            r_404 = http.get(base + "/_vulnscan_does_not_exist_xyz_42", context,
+                             timeout=5, headers={"User-Agent": "VulnScan/1.2"},
+                             allow_redirects=False)
             baseline_404_size = len(r_404.text)
             baseline_404_status = r_404.status_code
         except Exception:
@@ -57,11 +57,14 @@ class DirBruteforceModule(ScannerModule):
 
             path = entry["path"]
             try:
-                r = requests.get(base + path, timeout=5,
-                                 headers={"User-Agent": "VulnScan/1.2"},
-                                 allow_redirects=False)
+                r = http.get(base + path, context, timeout=5,
+                             headers={"User-Agent": "VulnScan/1.2"},
+                             allow_redirects=False)
                 last_req = time.time()
             except Exception:
+                continue
+
+            if r is None:
                 continue
 
             status = r.status_code

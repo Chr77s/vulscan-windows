@@ -12,9 +12,9 @@ puissent muter leurs payloads (via scanner.core.waf.mutate).
 """
 from __future__ import annotations
 from typing import List, Dict, Any
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 from scanner.core.waf import detect_waf
 
@@ -34,9 +34,12 @@ class WafDetectModule(ScannerModule):
 
         try:
             # 1. Baseline
-            r_base = requests.get(target, timeout=8,
-                                  headers={"User-Agent": "VulnScan/1.5"})
+            r_base = http.get(target, context, timeout=8,
+                              headers={"User-Agent": "VulnScan/1.5"})
         except Exception:
+            return []
+
+        if r_base is None:
             return []
 
         waf_baseline = detect_waf(dict(r_base.headers), r_base.text)
@@ -44,8 +47,8 @@ class WafDetectModule(ScannerModule):
         # 2. Requête malveillante
         waf_malicious = None
         try:
-            r_mal = requests.get(target, timeout=8,
-                                 headers={"User-Agent": self.MALICIOUS_UA})
+            r_mal = http.get(target, context, timeout=8,
+                             headers={"User-Agent": self.MALICIOUS_UA})
             waf_malicious = detect_waf(dict(r_mal.headers), r_mal.text)
         except Exception:
             pass

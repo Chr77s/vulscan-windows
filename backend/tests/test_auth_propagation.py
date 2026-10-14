@@ -52,3 +52,23 @@ def test_param_discovery_module_propagates_auth(mocker):
 def test_graphql_module_propagates_auth(mocker):
     from scanner.modules.graphql import GraphQLModule
     assert_module_propagates_auth(mocker, GraphQLModule, "http://example.com/graphql")
+
+
+def test_file_exposure_module_propagates_auth(mocker):
+    from scanner.modules.file_exposure import FileExposureModule
+    assert_module_propagates_auth(mocker, FileExposureModule, "http://example.com/")
+
+
+def test_dir_bruteforce_module_propagates_auth(mocker):
+    from scanner.modules.dir_bruteforce import DirBruteforceModule
+    assert_module_propagates_auth(mocker, DirBruteforceModule, "http://example.com/")
+
+
+def test_tech_fingerprint_module_propagates_auth(mocker):
+    from scanner.modules.tech_fingerprint import TechFingerprintModule
+    assert_module_propagates_auth(mocker, TechFingerprintModule, "http://example.com/")
+
+
+def test_waf_detect_module_propagates_auth(mocker):
+    from scanner.modules.waf_detect import WafDetectModule
+    assert_module_propagates_auth(mocker, WafDetectModule, "http://example.com/")
