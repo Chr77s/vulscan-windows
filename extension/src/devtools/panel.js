@@ -198,6 +198,7 @@ function switchTab(name) {
   if (name === "history") loadHistory();
   if (name === "traffic") renderTraffic();
   if (name === "surface") renderSurface();
+  if (name === "modules") renderModuleList();
 }
 
 // =====================================================
@@ -1042,6 +1043,88 @@ function buildSurfaceFormsHtml(forms) {
         <div>${fieldsHtml}</div>
       </div>`;
   }).join("");
+}
+
+// =====================================================
+// MODULES (sélecteur fin des modules de scan actif — Round 7).
+// Remplace le profil "Custom" historique à 5 cases (Options) : cfg.customModules
+// null/absent = jamais configuré -> comportement legacy (toutes les cases
+// apparaissent cochées ici, à titre d'affichage) ; [] = configuré à zéro module.
+// Les métadonnées viennent de GET /scanner/modules (backend interne, pas de
+// données issues de la cible scannée) — escapeHtml() par prudence quand même.
+// =====================================================
+async function renderModuleList() {
+  const container = document.getElementById("moduleList");
+  if (!container) return;
+
+  let cfg;
+  try {
+    cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+  } catch {
+    cfg = null;
+  }
+  if (!cfg) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">⚙</div><div>Impossible de lire la configuration.</div></div>`;
+    return;
+  }
+
+  let modules;
+  try {
+    const r = await fetch(`${cfg.backendUrl}/scanner/modules`, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    modules = data.modules || [];
+  } catch (e) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">⚙</div><div>Backend indisponible — impossible de charger la liste des modules (${escapeHtml(e.message)}).</div></div>`;
+    return;
+  }
+
+  if (modules.length === 0) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">⚙</div><div>Aucun module disponible.</div></div>`;
+    return;
+  }
+
+  // null -> jamais configuré : affichage "tout coché" (reflète le comportement
+  // legacy), sans pour autant écrire quoi que ce soit dans cfg.customModules.
+  const activeSet = Array.isArray(cfg.customModules) ? new Set(cfg.customModules) : null;
+
+  const byCategory = new Map();
+  for (const m of modules) {
+    const cat = m.category || "autre";
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat).push(m);
+  }
+
+  container.innerHTML = [...byCategory.entries()].map(([cat, mods]) => `
+    <div class="group-header" style="margin:0 -14px">${escapeHtml(cat)} <span class="group-count">${mods.length}</span></div>
+    ${mods.map((m) => {
+      const checked = activeSet ? activeSet.has(m.name) : true;
+      return `
+        <div class="card" style="margin:6px 0;padding:10px 14px">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+            <input type="checkbox" class="module-checkbox" data-module="${escapeHtml(m.name)}" ${checked ? "checked" : ""} style="margin-top:3px">
+            <span style="flex:1">
+              <span style="display:block;font-size:12.5px;font-weight:600;color:var(--text-1)">${escapeHtml(m.title || m.name)}</span>
+              ${m.description ? `<span style="display:block;font-size:11px;color:var(--text-3);margin-top:2px">${escapeHtml(m.description)}</span>` : ""}
+            </span>
+          </label>
+        </div>`;
+    }).join("")}
+  `).join("");
+
+  container.querySelectorAll(".module-checkbox").forEach((cb) => {
+    cb.addEventListener("change", onModuleCheckboxChange);
+  });
+}
+
+async function onModuleCheckboxChange() {
+  const checkedNames = [...document.querySelectorAll(".module-checkbox:checked")].map((cb) => cb.dataset.module);
+  try {
+    const cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+    await chrome.runtime.sendMessage({ type: "SET_CONFIG", payload: { ...cfg, customModules: checkedNames } });
+  } catch (e) {
+    console.warn("[VulnScan] SET_CONFIG (customModules) KO :", e.message);
+  }
 }
 
 // =====================================================

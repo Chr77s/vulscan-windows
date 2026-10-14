@@ -305,21 +305,27 @@ async function runActiveModules(cfg, url) {
   if (profile !== "custom" && SCAN_PROFILES[profile]) {
     enabled = [...SCAN_PROFILES[profile]];
   } else {
-    // Custom : on prend les modules selon les cases cochées
-    const CONFIG_TO_MODULES = {
-      testSQLi:          "sqli",
-      testXSS:           "xss",
-      testPathTraversal: "lfi",
-      testCmdInjection:  "command-injection",
-      testOpenRedirect:  "open-redirect",
-    };
-    for (const [key, moduleName] of Object.entries(CONFIG_TO_MODULES)) {
-      if (cfg[key]) enabled.push(moduleName);
+    // Custom : on prend les modules selon la sélection fine (Round 7) ou,
+    // si jamais configurée, selon les cases cochées historiques.
+    if (cfg.customModules !== null && cfg.customModules !== undefined) {
+      enabled = [...cfg.customModules];
+    } else {
+      // legacy fallback — unchanged from before this task
+      const CONFIG_TO_MODULES = {
+        testSQLi:          "sqli",
+        testXSS:           "xss",
+        testPathTraversal: "lfi",
+        testCmdInjection:  "command-injection",
+        testOpenRedirect:  "open-redirect",
+      };
+      for (const [key, moduleName] of Object.entries(CONFIG_TO_MODULES)) {
+        if (cfg[key]) enabled.push(moduleName);
+      }
+      enabled.push("idor", "ssrf", "xxe", "cors-misconfig", "jwt-analysis",
+                   "tech-fingerprint", "file-exposure", "dir-bruteforce",
+                   "form-fuzzer", "header-injection", "param-discovery", "json-fuzzer",
+                   "ssl-tls", "graphql", "waf-detect");
     }
-    enabled.push("idor", "ssrf", "xxe", "cors-misconfig", "jwt-analysis",
-                 "tech-fingerprint", "file-exposure", "dir-bruteforce",
-                 "form-fuzzer", "header-injection", "param-discovery", "json-fuzzer",
-                 "ssl-tls", "graphql", "waf-detect");
   }
 
   if (enabled.length === 0) return { findings: [], discovery: null, moduleLog: [] };

@@ -22,6 +22,10 @@ export const DEFAULT_CONFIG = {
   // Général
   minSeverity: "low",
   requestsPerSecond: 10,
+  // Round 7 — sélecteur fin de modules (remplace le profil "Custom" à 5 cases)
+  // null/absent = jamais configuré -> comportement legacy (5 cases + liste fixe) ;
+  // [] = configuré explicitement à zéro module -> aucun module actif.
+  customModules: null,
   excludedUrls: [],
   useBackend: true, // REQUIS depuis v1.1
   backendUrl: "http://localhost:9876",

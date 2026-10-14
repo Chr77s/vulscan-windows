@@ -633,6 +633,7 @@
     <button class="tab"        data-tab="diff">⇆ Diff</button>
     <button class="tab"        data-tab="traffic">🌐 Trafic <span id="tabTrafficCount" style="opacity:.6;font-size:10px;margin-left:4px">0</span></button>
     <button class="tab"        data-tab="surface">🗺 Surface <span id="tabSurfaceCount" style="opacity:.6;font-size:10px;margin-left:4px">0</span></button>
+    <button class="tab"        data-tab="modules">⚙ Modules</button>
   </div>
 
   <!-- MAIN GRID (tab résultats) -->
@@ -715,6 +716,17 @@
   <main class="tab-panel" data-tab-panel="surface" style="flex:1;flex-direction:column;background:var(--bg-0);overflow-y:auto">
     <div id="surfaceContent">
       <div class="empty"><div class="empty-icon">🗺</div><div>Aucune découverte pour l'instant. Lancez un scan avec les tests actifs activés pour cartographier la surface d'attaque.</div></div>
+    </div>
+  </main>
+
+  <!-- TAB MODULES (sélecteur fin des modules de scan actif — Round 7, remplace
+       le profil "Custom" historique à 5 cases dans les Options) -->
+  <main class="tab-panel" data-tab-panel="modules" style="flex:1;flex-direction:column;background:var(--bg-0);overflow-y:auto">
+    <div style="padding:10px 18px;background:var(--bg-1);border-bottom:1px solid var(--border);font-size:11.5px;color:var(--text-2)">
+      Sélectionnez les modules à exécuter lors des tests actifs. Tant que vous ne modifiez rien ici, le profil "Custom" historique (Options) continue de s'appliquer.
+    </div>
+    <div class="cards-container" id="moduleList">
+      <div class="empty"><div class="empty-icon">⚙</div><div>Chargement des modules...</div></div>
     </div>
   </main>
 
