@@ -66,7 +66,7 @@ def run_scan():
             },
             "discovery": {
                 "urls":          (context.get("crawled") or {}).get("urls", [])[:20],
-                "forms_count":   len((context.get("crawled") or {}).get("forms", [])),
+                "forms":         (context.get("crawled") or {}).get("forms", [])[:20],
                 "endpoints":     (context.get("crawled") or {}).get("api_endpoints", [])[:10],
             },
         })

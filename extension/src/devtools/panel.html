@@ -611,6 +611,7 @@
     <button class="tab"        data-tab="history">🕘 Historique <span id="tabHistoryCount" style="opacity:.6;font-size:10px;margin-left:4px">0</span></button>
     <button class="tab"        data-tab="diff">⇆ Diff</button>
     <button class="tab"        data-tab="traffic">🌐 Trafic <span id="tabTrafficCount" style="opacity:.6;font-size:10px;margin-left:4px">0</span></button>
+    <button class="tab"        data-tab="surface">🗺 Surface <span id="tabSurfaceCount" style="opacity:.6;font-size:10px;margin-left:4px">0</span></button>
   </div>
 
   <!-- MAIN GRID (tab résultats) -->
@@ -686,6 +687,13 @@
   <main class="tab-panel" data-tab-panel="traffic" style="flex:1;flex-direction:column;background:var(--bg-0);overflow-y:auto">
     <div class="cards-container" id="trafficList">
       <div class="empty"><div class="empty-icon">🌐</div><div>Aucune requête HTTP capturée pour l'instant.</div></div>
+    </div>
+  </main>
+
+  <!-- TAB SURFACE (surface d'attaque découverte par le crawler : pages, formulaires, endpoints) -->
+  <main class="tab-panel" data-tab-panel="surface" style="flex:1;flex-direction:column;background:var(--bg-0);overflow-y:auto">
+    <div id="surfaceContent">
+      <div class="empty"><div class="empty-icon">🗺</div><div>Aucune découverte pour l'instant. Lancez un scan avec les tests actifs activés pour cartographier la surface d'attaque.</div></div>
     </div>
   </main>
 

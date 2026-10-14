@@ -201,12 +201,13 @@ async function startScan(tabId, url) {
   if (cfg.activeEnabled) {
     broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "active", label: "Tests actifs (injections) en cours..." } });
     try {
-      const activeVulns = await runActiveModules(cfg, url);
+      const { findings: activeVulns, discovery } = await runActiveModules(cfg, url);
       for (const v of activeVulns) {
         const enriched = ensureFinding(v, url);
         currentScan.vulnerabilities.push(enriched);
         broadcastMessage({ type: "VULN_FOUND", payload: enriched });
       }
+      if (discovery) currentScan.discovery = discovery;
       console.log("[VulnScan] Tests actifs : " + activeVulns.length + " findings");
     } catch (e) {
       console.warn("[VulnScan] Tests actifs échoués :", e.message);
@@ -320,7 +321,7 @@ async function runActiveModules(cfg, url) {
                  "ssl-tls", "graphql", "waf-detect");
   }
 
-  if (enabled.length === 0) return [];
+  if (enabled.length === 0) return { findings: [], discovery: null };
 
   // Construire l'auth context depuis la config
   const auth = buildAuthFromConfig(cfg);
@@ -339,13 +340,13 @@ async function runActiveModules(cfg, url) {
     });
     if (!r.ok) {
       console.warn("[VulnScan] /scanner/run HTTP " + r.status);
-      return [];
+      return { findings: [], discovery: null };
     }
     const data = await r.json();
-    return data.findings || [];
+    return { findings: data.findings || [], discovery: data.discovery || null };
   } catch (e) {
     console.warn("[VulnScan] /scanner/run KO :", e.message);
-    return [];
+    return { findings: [], discovery: null };
   }
 }
 

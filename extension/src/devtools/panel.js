@@ -7,6 +7,7 @@
 // ================================================================
 
 let allVulns       = [];
+let currentDiscovery = null;  // { urls, forms, endpoints } — crawler discovery du dernier scan (Round 7)
 let lastScanId     = null;
 let expandedIds    = new Set();
 let descExpandedIds = new Set();   // pour "Voir plus" des descriptions
@@ -56,6 +57,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (scanHistory.length > 0) {
     lastScanId = scanHistory[0].id;
     allVulns   = scanHistory[0].vulnerabilities || [];
+    currentDiscovery = scanHistory[0].discovery || null;
     renderAll();
     updateScanMeta(scanHistory[0]);
   }
@@ -131,6 +133,7 @@ function setupRuntimeListeners() {
     if (message.type === "SCAN_COMPLETED") {
       lastScanId = message.payload.id;
       allVulns   = message.payload.vulnerabilities || [];
+      currentDiscovery = message.payload.discovery || null;
       renderAll();
       updateScanMeta(message.payload);
       setScanningState(false);
@@ -162,6 +165,7 @@ function switchTab(name) {
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.dataset.tabPanel === name));
   if (name === "history") loadHistory();
   if (name === "traffic") renderTraffic();
+  if (name === "surface") renderSurface();
 }
 
 // =====================================================
@@ -200,6 +204,7 @@ async function onStartScan() {
     const tabId = chrome.devtools.inspectedWindow.tabId;
     const tab   = await chrome.tabs.get(tabId);
     allVulns = [];
+    currentDiscovery = null;
     expandedIds.clear();
     descExpandedIds.clear();
     renderAll();
@@ -237,6 +242,7 @@ async function onStopScan() {
 
 function onClearResults() {
   allVulns = [];
+  currentDiscovery = null;
   expandedIds.clear();
   descExpandedIds.clear();
   renderAll();
@@ -253,6 +259,7 @@ function renderAll() {
   renderTypes();
   renderCards();
   renderTraffic();
+  renderSurface();
   updateFilterCounts();
 }
 
@@ -609,6 +616,7 @@ function renderHistory() {
       if (scan) {
         lastScanId = scan.id;
         allVulns = scan.vulnerabilities || [];
+        currentDiscovery = scan.discovery || null;
         renderAll();
         updateScanMeta(scan);
         switchTab("results");
@@ -890,6 +898,84 @@ function buildTrafficRowHtml(v) {
         </div>
       </div>
     </div>`;
+}
+
+// =====================================================
+// SURFACE (attack surface découverte par le crawler : pages, formulaires,
+// endpoints API — Round 7). Toutes les valeurs ci-dessous proviennent de la
+// cible scannée (données non fiables) et DOIVENT passer par escapeHtml().
+// Les valeurs de champs de formulaire ne sont JAMAIS affichées (name/type
+// uniquement) — voir le point de revue dédié de cette tâche.
+// =====================================================
+function renderSurface() {
+  const container = document.getElementById("surfaceContent");
+  const countEl = document.getElementById("tabSurfaceCount");
+  if (!container) return;
+
+  const discovery = currentDiscovery || {};
+  const urls = discovery.urls || [];
+  const forms = discovery.forms || [];
+  const endpoints = discovery.endpoints || [];
+  const total = urls.length + forms.length + endpoints.length;
+
+  if (countEl) countEl.textContent = total;
+
+  if (total === 0) {
+    container.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🗺</div>
+        <div>Aucune découverte pour l'instant. Lancez un scan avec les tests actifs activés pour cartographier la surface d'attaque.</div>
+      </div>`;
+    return;
+  }
+
+  const vulnCountForUrl = (u) => allVulns.filter((v) => v.url === u).length;
+
+  container.innerHTML = `
+    <div class="cards-container">
+      ${buildSurfaceGroupHtml("📄 Pages découvertes", urls, () => buildSurfaceUrlListHtml(urls, vulnCountForUrl))}
+      ${buildSurfaceGroupHtml("📝 Formulaires détectés", forms, () => buildSurfaceFormsHtml(forms))}
+      ${buildSurfaceGroupHtml("🔌 Endpoints API", endpoints, () => buildSurfaceUrlListHtml(endpoints, vulnCountForUrl))}
+    </div>`;
+}
+
+function buildSurfaceGroupHtml(label, items, buildBodyHtml) {
+  return `
+    <div class="group-header" style="margin:0 -14px">${label} <span class="group-count">${items.length}</span></div>
+    ${items.length === 0
+      ? `<div style="padding:10px 14px;color:var(--text-4);font-size:11.5px">Aucun élément détecté.</div>`
+      : buildBodyHtml()}`;
+}
+
+function buildSurfaceUrlListHtml(items, vulnCountFn) {
+  return items.map((u) => {
+    const count = vulnCountFn(u);
+    return `
+      <div class="type-row" style="margin:6px 0">
+        <span class="type-name" style="font-family:monospace;font-size:11.5px;word-break:break-all;font-weight:400">${escapeHtml(u)}</span>
+        <span class="type-count">${count > 0 ? `${count} vuln${count > 1 ? "s" : ""}` : "—"}</span>
+      </div>`;
+  }).join("");
+}
+
+// Affiche uniquement action/method/field.name/field.type — ne JAMAIS rendre field.value.
+function buildSurfaceFormsHtml(forms) {
+  return forms.map((form, idx) => {
+    const fields = form.fields || [];
+    const fieldsHtml = fields.length > 0
+      ? fields.map((f) =>
+          `<span class="badge badge-neutral" style="margin:3px 4px 0 0;display:inline-block">${escapeHtml(f.name || "?")} <span style="opacity:.65">(${escapeHtml(f.type || "text")})</span></span>`
+        ).join("")
+      : `<span style="color:var(--text-4);font-size:11px">Aucun champ</span>`;
+    return `
+      <div class="card" style="margin:6px 0">
+        <div class="card-label">
+          <span>${escapeHtml(form.method || "GET")} · ${escapeHtml(form.id || ("form-" + idx))}</span>
+        </div>
+        <div class="card-value" style="font-family:monospace;font-size:11.5px;word-break:break-all;margin-bottom:8px">${escapeHtml(form.action || "—")}</div>
+        <div>${fieldsHtml}</div>
+      </div>`;
+  }).join("");
 }
 
 // =====================================================
