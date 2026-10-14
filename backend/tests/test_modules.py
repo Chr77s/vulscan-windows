@@ -133,15 +133,20 @@ def test_sqli_time_based_does_not_false_positive_on_network_jitter(mocker):
     fast = mocker.Mock(status_code=200, headers={}, text="")
     mocker.patch("scanner.core.http.requests.request", return_value=fast)
     mocker.patch("scanner.core.http.time.sleep")
-    # Baseline déjà lente (0.4s) ; chacun des 4 TIME_PAYLOADS n'ajoute que 0.3s de plus
-    # (delta=0.3 < 3.5 à chaque fois) -> aucune confirmation, la boucle va jusqu'au bout.
+    # Régression pour "le matcher time-based doit comparer le DELTA (payload - baseline),
+    # jamais le temps brut écoulé". Avec une baseline déjà lente (~3.2s, ex: réseau congestionné
+    # ou cible distante) et des payloads à ~3.6s, le temps BRUT de chaque payload (3.6s) est déjà
+    # ≥ TIME_THRESHOLD (3.5s) : une implémentation buguée qui comparerait le temps brut au lieu
+    # du delta confirmerait ici à tort une SQLi time-based sur les 4 TIME_PAYLOADS. L'implémentation
+    # correcte calcule delta = payload - baseline = 3.6 - 3.2 = 0.4s, largement sous le seuil
+    # -> aucune confirmation, la boucle va jusqu'au bout des 4 payloads.
     time_values = iter([
-        0.0, 0.4,   # base_time_1 = 0.4s
-        1.0, 1.4,   # base_time_2 = 0.4s  => baseline = 0.4
-        2.0, 2.7,   # payload 1 : 0.7s, delta=0.3
-        3.0, 3.7,   # payload 2 : 0.7s, delta=0.3
-        4.0, 4.7,   # payload 3 : 0.7s, delta=0.3
-        5.0, 5.7,   # payload 4 : 0.7s, delta=0.3
+        0.0, 3.2,    # base_time_1 = 3.2s
+        10.0, 13.2,  # base_time_2 = 3.2s  => baseline = 3.2
+        20.0, 23.6,  # payload 1 : brut=3.6s (>= seuil !), delta=0.4
+        30.0, 33.6,  # payload 2 : brut=3.6s (>= seuil !), delta=0.4
+        40.0, 43.6,  # payload 3 : brut=3.6s (>= seuil !), delta=0.4
+        50.0, 53.6,  # payload 4 : brut=3.6s (>= seuil !), delta=0.4
     ])
     mocker.patch("scanner.modules.sqli.time.time", side_effect=lambda: next(time_values))
 
