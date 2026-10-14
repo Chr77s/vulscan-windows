@@ -11,13 +11,13 @@ OWASP A02:2021 (cryptographic failures) / CWE-327, CWE-345.
 """
 from __future__ import annotations
 from typing import List, Dict, Any
-import requests
 import base64
 import hmac
 import hashlib
 import json
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -43,7 +43,7 @@ class JwtAnalyzerModule(ScannerModule):
         findings: List[Finding] = []
 
         try:
-            r = requests.get(target, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+            r = http.get(target, context, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
             body = r.text
             cookies = r.headers.get("Set-Cookie", "")
         except Exception:

@@ -7,9 +7,9 @@ d'isoler les commentaires HTML et les blocs <script>, sans bruit.
 """
 from __future__ import annotations
 from typing import List, Dict, Any
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 try:
@@ -42,7 +42,7 @@ class InfoDisclosureModule(ScannerModule):
             return []
 
         try:
-            r = requests.get(target, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+            r = http.get(target, context, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
             body = r.text
         except Exception:
             return []

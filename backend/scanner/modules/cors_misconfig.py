@@ -10,9 +10,9 @@ OWASP A05 / CWE-942.
 """
 from __future__ import annotations
 from typing import List, Dict, Any
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -32,11 +32,14 @@ class CorsMisconfigModule(ScannerModule):
 
         # Test 1 : origin reflechie
         try:
-            r = requests.get(target, timeout=8, headers={
+            r = http.get(target, context, timeout=8, headers={
                 "User-Agent": "VulnScan/1.2",
                 "Origin": self.EVIL_ORIGIN,
             })
         except Exception:
+            return findings
+
+        if r is None:
             return findings
 
         aco  = r.headers.get("Access-Control-Allow-Origin", "")

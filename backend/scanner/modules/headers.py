@@ -12,6 +12,7 @@ from typing import List, Dict, Any
 import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -45,8 +46,8 @@ class HeadersModule(ScannerModule):
             return []
         findings: List[Finding] = []
         try:
-            r = requests.get(target, timeout=8, allow_redirects=True,
-                             headers={"User-Agent": "VulnScan/1.2 (security-audit)"})
+            r = http.get(target, context, timeout=8, allow_redirects=True,
+                         headers={"User-Agent": "VulnScan/1.2 (security-audit)"})
             headers = {k.lower(): v for k, v in r.headers.items()}
             url = r.url
             is_https = url.startswith("https://")

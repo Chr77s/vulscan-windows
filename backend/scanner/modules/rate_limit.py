@@ -12,10 +12,10 @@ Si aucun signal de throttling → brute-force trivial = vuln A07 / CWE-307.
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse
-import requests
 import time
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -44,8 +44,8 @@ class RateLimitModule(ScannerModule):
         start = time.time()
         for i in range(self.BURST_SIZE):
             try:
-                r = requests.post(target, data={"username": "test", "password": "wrong"},
-                                  timeout=5, headers={"User-Agent": "VulnScan/1.2"})
+                r = http.post(target, context, data={"username": "test", "password": "wrong"},
+                               timeout=5, headers={"User-Agent": "VulnScan/1.2"})
                 statuses.append(r.status_code)
                 if r.headers.get("Retry-After"):
                     retry_after = r.headers["Retry-After"]
