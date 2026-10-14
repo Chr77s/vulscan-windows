@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><title>VulnScan DevTools</title></head>
+<body>
+<script>
+  // Enregistre un panneau dans les DevTools Chrome
+  chrome.devtools.panels.create(
+    "VulnScan",           // Titre de l'onglet
+    "icons/icon32.png",   // Icone
+    "src/devtools/panel.html", // Page du panneau
+    function(panel) {
+      console.log("[VulnScan] Panneau DevTools cree");
+    }
+  );
+</script>
+</body>
+</html>

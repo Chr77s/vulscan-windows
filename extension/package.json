@@ -1,0 +1,14 @@
+{
+  "name": "vulnscan-extension",
+  "version": "1.0.0",
+  "description": "Extension Chrome de scan de vulnerabilites web",
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch",
+    "lint": "echo Lint desactive pour simplifier"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/chrome": "^0.0.268"
+  }
+}

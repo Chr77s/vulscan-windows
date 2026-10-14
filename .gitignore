@@ -1,0 +1,13 @@
+# Python
+backend/.venv/
+**/__pycache__/
+*.pyc
+
+# SQLite runtime data (regenerated locally)
+backend/database/vulnscan.db
+backend/database/vulnscan.db-shm
+backend/database/vulnscan.db-wal
+
+# OS / editor
+.DS_Store
+Thumbs.db

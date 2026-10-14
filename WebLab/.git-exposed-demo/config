@@ -1,0 +1,15 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	symlinks = false
+	ignorecase = true
+[remote "origin"]
+	url = git@github.com:weblab/weblab-secret-repo.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[user]
+	email = devops@weblab.lab
+	name = WebLab DevOps
+[remote "deploy"]
+	url = ssh://deploy@10.0.1.42:22/var/www/weblab.git

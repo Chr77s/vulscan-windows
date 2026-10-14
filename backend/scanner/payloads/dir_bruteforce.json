@@ -1,0 +1,54 @@
+{
+  "family": "dir_bruteforce",
+  "version": "1.0.0",
+  "categories": {
+    "admin": [
+      {"path": "/admin",        "severity": "medium", "confidence_hint": 70},
+      {"path": "/admin/",       "severity": "medium", "confidence_hint": 70},
+      {"path": "/admin.php",    "severity": "medium", "confidence_hint": 75},
+      {"path": "/administrator", "severity": "medium", "confidence_hint": 70},
+      {"path": "/wp-admin",     "severity": "low",    "confidence_hint": 80},
+      {"path": "/manager",      "severity": "medium", "confidence_hint": 70},
+      {"path": "/phpmyadmin",   "severity": "high",   "confidence_hint": 90},
+      {"path": "/adminer.php",  "severity": "high",   "confidence_hint": 90}
+    ],
+    "vcs": [
+      {"path": "/.git/HEAD",     "severity": "high",     "confidence_hint": 95},
+      {"path": "/.git/config",   "severity": "high",     "confidence_hint": 95},
+      {"path": "/.svn/entries",  "severity": "high",     "confidence_hint": 90},
+      {"path": "/.hg/store",     "severity": "medium",   "confidence_hint": 85}
+    ],
+    "config": [
+      {"path": "/.env",                "severity": "critical", "confidence_hint": 95},
+      {"path": "/.env.local",          "severity": "critical", "confidence_hint": 90},
+      {"path": "/.env.production",     "severity": "critical", "confidence_hint": 95},
+      {"path": "/config.php",          "severity": "medium",   "confidence_hint": 60},
+      {"path": "/config.json",         "severity": "medium",   "confidence_hint": 75},
+      {"path": "/web.config",          "severity": "medium",   "confidence_hint": 80},
+      {"path": "/wp-config.php.bak",   "severity": "critical", "confidence_hint": 90},
+      {"path": "/.htaccess",           "severity": "low",      "confidence_hint": 80},
+      {"path": "/.htpasswd",           "severity": "high",     "confidence_hint": 95}
+    ],
+    "backup": [
+      {"path": "/backup.sql",         "severity": "critical", "confidence_hint": 95},
+      {"path": "/backup.zip",         "severity": "high",     "confidence_hint": 90},
+      {"path": "/backup.tar.gz",      "severity": "high",     "confidence_hint": 90},
+      {"path": "/db.sql",             "severity": "critical", "confidence_hint": 95},
+      {"path": "/database.sql",       "severity": "critical", "confidence_hint": 95},
+      {"path": "/dump.sql",           "severity": "critical", "confidence_hint": 95},
+      {"path": "/backup/",            "severity": "medium",   "confidence_hint": 70},
+      {"path": "/old/",               "severity": "low",      "confidence_hint": 60},
+      {"path": "/_backup/",           "severity": "medium",   "confidence_hint": 75}
+    ],
+    "discovery": [
+      {"path": "/robots.txt",         "severity": "info",   "confidence_hint": 100},
+      {"path": "/sitemap.xml",        "severity": "info",   "confidence_hint": 100},
+      {"path": "/.well-known/",       "severity": "info",   "confidence_hint": 90},
+      {"path": "/swagger.json",       "severity": "medium", "confidence_hint": 90, "description": "API spec exposée"},
+      {"path": "/api-docs",           "severity": "medium", "confidence_hint": 85},
+      {"path": "/phpinfo.php",        "severity": "high",   "confidence_hint": 95},
+      {"path": "/server-status",      "severity": "high",   "confidence_hint": 95, "description": "Apache mod_status"},
+      {"path": "/.DS_Store",          "severity": "low",    "confidence_hint": 90}
+    ]
+  }
+}

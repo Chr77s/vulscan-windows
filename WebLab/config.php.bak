@@ -1,0 +1,9 @@
+<?php
+// 💀 VULN : ancien backup oublié sur le serveur (CWE-530)
+// Accessible via http://localhost/WebLab/config.php.bak
+$DB_HOST = "localhost";
+$DB_NAME = "weblab";
+$DB_USER = "root";
+$DB_PASS = "weblab_root_old_password_2023";
+$JWT_SECRET = "old_jwt_secret_2023";
+$ADMIN_PASSWORD = "Sup3rAdm1n_2023!";

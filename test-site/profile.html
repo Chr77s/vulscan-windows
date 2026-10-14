@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>JuiceCorp — Mon profil</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f8fafc; color: #1e293b; }
+    .nav { background: #1e293b; color: white; padding: 14px 30px; display: flex; align-items: center; gap: 20px; }
+    .nav h1 { font-size: 18px; }
+    .nav a { color: #cbd5e1; text-decoration: none; font-size: 14px; }
+    .container { max-width: 800px; margin: 40px auto; padding: 0 30px; }
+    .profile-card { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .profile-card h2 { color: #4f46e5; margin-bottom: 18px; }
+    .field { padding: 10px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; }
+    .field span:first-child { color: #64748b; font-size: 13px; }
+    .field span:last-child { color: #1e293b; font-weight: 500; font-size: 14px; }
+    .form-group { margin: 14px 0; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+    .form-group input { width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+    button { background: #4f46e5; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <h1>🧃 JuiceCorp</h1>
+    <a href="index.html">Accueil</a>
+    <a href="profile.html">Profil</a>
+  </nav>
+
+  <div class="container">
+    <div class="profile-card">
+      <h2>👤 Mon profil</h2>
+      <div class="field"><span>Nom</span><span>Jean Dupont</span></div>
+      <div class="field"><span>Email</span><span>jean.dupont@juicecorp.test</span></div>
+      <div class="field"><span>Téléphone</span><span>+33 6 12 34 56 78</span></div>
+      <div class="field"><span>Plan</span><span>Pro · 29€/mois</span></div>
+
+      <h2 style="margin-top:30px">⚙️ Modifier mes informations</h2>
+
+      <!-- VULN : Formulaire POST sans token CSRF -->
+      <form method="POST" action="/api/profile/update">
+        <div class="form-group">
+          <label>Nom complet</label>
+          <input type="text" name="fullname" value="Jean Dupont">
+        </div>
+        <div class="form-group">
+          <label>Adresse email</label>
+          <input type="email" name="email" value="jean.dupont@juicecorp.test">
+        </div>
+        <button type="submit">Enregistrer</button>
+      </form>
+    </div>
+  </div>
+
+  <!--
+    VULN : Données sensibles exposées dans le HTML public
+    Le scanner doit détecter :
+      - Une clé API (api_key = "...")
+      - Un chemin absolu serveur (/var/www/...)
+      - Plusieurs adresses email
+  -->
+  <script>
+    // Configuration "client"... avec secret embarqué (à ne JAMAIS faire)
+    window.APP_CONFIG = {
+      apiBase: "https://api.juicecorp.test/v2",
+      api_key: "sk_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
+      secret_key: "secret_token_HMAC_3f8a9b2c4d6e8f0a1b3c5d7e9f1a2b4c",
+      uploadPath: "/var/www/juicecorp/uploads",
+      adminEmail: "admin@juicecorp.test",
+      supportEmails: ["support@juicecorp.test", "billing@juicecorp.test", "dev-team@juicecorp.test"],
+    };
+
+    console.log("Config chargée :", window.APP_CONFIG);
+  </script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>JuiceCorp — Connexion</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f8fafc; color: #1e293b; min-height: 100vh; display: flex; flex-direction: column; }
+    .nav { background: #1e293b; color: white; padding: 14px 30px; display: flex; align-items: center; gap: 20px; }
+    .nav h1 { font-size: 18px; }
+    .nav a { color: #cbd5e1; text-decoration: none; font-size: 14px; }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
+    .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 100%; max-width: 380px; }
+    .login-box h2 { color: #4f46e5; margin-bottom: 6px; }
+    .login-box .sub { color: #64748b; margin-bottom: 24px; font-size: 13px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+    .form-group input { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+    .form-group input:focus { outline: none; border-color: #4f46e5; }
+    .btn-primary { width: 100%; background: #4f46e5; color: white; border: none; padding: 12px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-primary:hover { background: #4338ca; }
+    .small-link { display: block; text-align: center; margin-top: 14px; color: #6366f1; font-size: 12px; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <h1>🧃 JuiceCorp</h1>
+    <a href="index.html">Accueil</a>
+    <a href="login.html">Connexion</a>
+    <a href="search.html">Recherche</a>
+  </nav>
+
+  <main>
+    <div class="login-box">
+      <h2>Connexion</h2>
+      <div class="sub">Accédez à votre espace JuiceCorp.</div>
+
+      <!--
+        VULN intentionnelle :
+        - method="POST" sans token CSRF caché (pas de champ csrf/token)
+        - action vers une route arbitraire
+      -->
+      <form action="/api/login" method="POST">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="vous@exemple.com" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Mot de passe</label>
+          <input type="password" id="password" name="password" required>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" name="remember"> Se souvenir de moi
+          </label>
+        </div>
+        <button type="submit" class="btn-primary">Se connecter</button>
+      </form>
+
+      <a class="small-link" href="#forgot">Mot de passe oublié ?</a>
+    </div>
+  </main>
+
+  <!-- VULN : eval() inline pour "valider" l'email -->
+  <script>
+    // Tentative malhabile de validation par eval()
+    document.querySelector("form").addEventListener("submit", function(e) {
+      var email = document.getElementById("email").value;
+      try {
+        // VULN : eval avec input utilisateur (catastrophe conceptuelle)
+        var test = eval("'" + email + "'.includes('@')");
+        if (!test) { e.preventDefault(); alert("Email invalide"); }
+      } catch(err) { console.log("validation:", err); }
+    });
+
+    // VULN : assignation innerHTML dynamique sans assainissement
+    var msg = new URLSearchParams(location.search).get("msg");
+    if (msg) {
+      document.querySelector(".sub").innerHTML = msg; // ← détecté
+    }
+  </script>
+</body>
+</html>

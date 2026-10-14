@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>VulnScan Panel</title>
+  <style>
+    /* =========================================================
+       VulnScan — Dashboard DevTools (v2)
+       ========================================================= */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-0:        #0b1120;
+      --bg-1:        #0f172a;
+      --bg-2:        #1e293b;
+      --bg-3:        #283447;
+      --border:      #334155;
+      --border-soft: #1e3a5c;
+      --text-0:      #f8fafc;
+      --text-1:      #e2e8f0;
+      --text-2:      #94a3b8;
+      --text-3:      #64748b;
+      --text-4:      #475569;
+      --accent:      #6366f1;
+      --accent-2:    #4f46e5;
+      --critical:    #ef4444;
+      --high:        #f97316;
+      --medium:      #eab308;
+      --low:         #22c55e;
+      --info:        #38bdf8;
+    }
+
+    html, body { height: 100%; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: radial-gradient(ellipse at top left, #14213a 0%, var(--bg-0) 55%);
+      color: var(--text-1);
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ====== Topbar ====== */
+    .topbar {
+      display: flex; align-items: center; gap: 14px;
+      padding: 12px 18px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-logo {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }
+    .brand h1 { font-size: 15px; font-weight: 700; color: var(--text-0); letter-spacing: 0.2px; }
+    .brand .tag { font-size: 9px; color: var(--text-3); background: var(--bg-2); padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: 600; }
+
+    .url-pill {
+      flex: 1;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 7px 14px;
+      color: var(--text-2);
+      font-size: 12px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .url-pill::before {
+      content: ""; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--low); flex-shrink: 0;
+      box-shadow: 0 0 8px var(--low);
+    }
+
+    .btn {
+      padding: 7px 16px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: 12.5px; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99, 102, 241, 0.5); }
+    .btn-secondary { background: var(--bg-2); color: var(--text-1); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--bg-3); }
+    .btn-danger { background: linear-gradient(135deg, #f87171, #dc2626); color: white; }
+    .btn-icon { padding: 6px 8px; }
+
+    /* ====== KPI Strip ====== */
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: 1.2fr repeat(5, 1fr);
+      gap: 10px;
+      padding: 14px 18px;
+      flex-shrink: 0;
+    }
+    .kpi {
+      background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi::before {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    }
+    .kpi.total::before    { background: var(--accent); }
+    .kpi.critical::before { background: var(--critical); }
+    .kpi.high::before     { background: var(--high); }
+    .kpi.medium::before   { background: var(--medium); }
+    .kpi.low::before      { background: var(--low); }
+    .kpi.info::before     { background: var(--info); }
+
+    .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+    .kpi-value { font-size: 24px; font-weight: 800; color: var(--text-0); line-height: 1.1; margin-top: 4px; }
+    .kpi.critical .kpi-value { color: var(--critical); }
+    .kpi.high     .kpi-value { color: var(--high); }
+    .kpi.medium   .kpi-value { color: var(--medium); }
+    .kpi.low      .kpi-value { color: var(--low); }
+    .kpi.info     .kpi-value { color: var(--info); }
+    .kpi-sub { font-size: 10px; color: var(--text-3); margin-top: 2px; }
+
+    /* ====== Toolbar (filter row) ====== */
+    .toolbar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 18px 12px;
+      flex-shrink: 0;
+    }
+    .search-box {
+      position: relative; flex: 1; max-width: 340px;
+    }
+    .search-box input {
+      width: 100%;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 12px 7px 32px;
+      color: var(--text-1);
+      font-size: 12.5px;
+      outline: none;
+    }
+    .search-box input:focus { border-color: var(--accent); }
+    .search-box::before {
+      content: "🔍"; position: absolute; left: 10px; top: 50%;
+      transform: translateY(-50%); font-size: 11px; opacity: 0.6;
+    }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      padding: 5px 11px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; color: var(--text-2);
+      cursor: pointer; user-select: none;
+      transition: all 0.15s;
+    }
+    .chip:hover { background: var(--bg-2); color: var(--text-0); }
+    .chip.active { border-color: var(--accent); color: var(--text-0); background: rgba(99, 102, 241, 0.15); }
+    .chip .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+    .chip.crit .dot { background: var(--critical); }
+    .chip.high .dot { background: var(--high); }
+    .chip.med  .dot { background: var(--medium); }
+    .chip.low  .dot { background: var(--low); }
+    .chip.info .dot { background: var(--info); }
+
+    /* ====== Main layout ====== */
+    .main {
+      display: grid;
+      grid-template-columns: 320px 1fr 360px;
+      flex: 1; min-height: 0;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Sidebar : vulnerability list */
+    .sidebar {
+      background: rgba(15, 23, 42, 0.5);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      display: flex; flex-direction: column;
+    }
+    .sidebar-header {
+      padding: 10px 14px;
+      font-size: 10px; font-weight: 700; color: var(--text-3);
+      text-transform: uppercase; letter-spacing: 0.07em;
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+      position: sticky; top: 0; background: var(--bg-1); z-index: 2;
+    }
+    .group-header {
+      padding: 8px 14px;
+      font-size: 10px; font-weight: 700; color: var(--text-2);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border-soft);
+      border-top: 1px solid var(--border-soft);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .group-count { color: var(--text-3); font-size: 10px; }
+
+    .vuln-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-soft);
+      cursor: pointer;
+      transition: background 0.12s;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .vuln-item:hover { background: rgba(99, 102, 241, 0.08); }
+    .vuln-item.selected {
+      background: rgba(99, 102, 241, 0.18);
+      border-left: 3px solid var(--accent);
+      padding-left: 11px;
+    }
+    .vuln-item-row { display: flex; align-items: center; gap: 6px; }
+    .badge {
+      display: inline-block; font-size: 9px; font-weight: 700;
+      padding: 2px 7px; border-radius: 4px;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .badge-critical { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+    .badge-high     { background: rgba(249, 115, 22, 0.18); color: #fdba74; }
+    .badge-medium   { background: rgba(234, 179, 8, 0.18);  color: #fde047; }
+    .badge-low      { background: rgba(34, 197, 94, 0.18);  color: #86efac; }
+    .badge-info     { background: rgba(56, 189, 248, 0.18); color: #93c5fd; }
+    .badge-neutral  { background: var(--bg-2); color: var(--text-2); font-weight: 600; }
+
+    .vuln-type { font-size: 10px; color: var(--text-3); font-weight: 500; }
+    .vuln-desc {
+      font-size: 12px; color: var(--text-1); line-height: 1.4;
+      word-break: break-word;
+    }
+    .vuln-meta-row { display:flex; align-items:center; gap:6px; font-size:10px; color:var(--text-3); margin-top:2px; }
+    .vuln-meta-row .conf {
+      padding:1px 6px; border-radius:3px; background:var(--bg-2); color:var(--text-2);
+      font-size:9px; font-weight:600;
+    }
+    .click-hint { font-size:10px; color:var(--accent); margin-top:4px; opacity:0; transition:opacity .15s; }
+    .vuln-item:hover .click-hint { opacity: 1; }
+
+    .empty {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 100%; color: var(--text-4); font-size: 13px; text-align: center; padding: 30px;
+      gap: 10px;
+    }
+    .empty-icon { font-size: 36px; opacity: 0.4; }
+
+    /* Detail panel (center) */
+    .detail-panel {
+      overflow-y: auto;
+      padding: 20px 22px;
+      background: var(--bg-0);
+    }
+    .detail-title { font-size: 18px; font-weight: 700; color: var(--text-0); margin-bottom: 4px; }
+    .detail-sub { font-size: 12px; color: var(--text-3); margin-bottom: 18px; }
+
+    .card {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .card-label {
+      font-size: 10px; font-weight: 700; color: var(--text-3);
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .card-value { font-size: 13px; color: var(--text-1); word-break: break-word; line-height: 1.5; }
+    .evidence {
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: 11.5px;
+      background: var(--bg-0);
+      border: 1px solid var(--border-soft);
+      padding: 10px 12px;
+      border-radius: 6px;
+      color: #cbd5e1;
+      white-space: pre-wrap; word-break: break-word;
+      max-height: 220px; overflow-y: auto;
+    }
+    .copy-btn {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-3); padding: 2px 8px; border-radius: 4px;
+      font-size: 10px; cursor: pointer; font-weight: 600;
+    }
+    .copy-btn:hover { color: var(--text-0); border-color: var(--accent); }
+
+    /* Right column : donut + summary */
+    .right {
+      background: rgba(15, 23, 42, 0.5);
+      border-left: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .panel-title { font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+
+    .donut-wrap { display: flex; flex-direction: column; align-items: center; }
+    .donut-svg { width: 170px; height: 170px; }
+    .donut-center {
+      position: absolute; text-align: center;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .donut-container { position: relative; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+    .donut-center-value { font-size: 28px; font-weight: 800; color: var(--text-0); line-height: 1; }
+    .donut-center-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+
+    .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; width: 100%; margin-top: 8px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); }
+    .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .legend-val { margin-left: auto; font-weight: 700; color: var(--text-0); }
+
+    .types-list { display: flex; flex-direction: column; gap: 6px; }
+    .type-row {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px; color: var(--text-1);
+      background: var(--bg-1);
+      padding: 8px 11px; border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .type-row .type-name { font-weight: 600; }
+    .type-row .type-count { font-size: 11px; color: var(--text-3); }
+    .type-bar { height: 4px; border-radius: 2px; background: var(--bg-3); overflow: hidden; margin-top: 6px; }
+    .type-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent) 0%, #8b5cf6 100%); border-radius: 2px; }
+
+    /* Status / footer */
+    .statusbar {
+      display: flex; align-items: center; gap: 14px;
+      padding: 8px 18px;
+      background: var(--bg-1);
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-3);
+      flex-shrink: 0;
+    }
+    .status-pill { display: inline-flex; align-items: center; gap: 6px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-4); }
+    .status-dot.scanning { background: var(--medium); animation: pulse 1.3s ease-in-out infinite; }
+    .status-dot.ready { background: var(--low); }
+    .status-dot.error { background: var(--critical); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .export-group { margin-left: auto; display: flex; gap: 6px; }
+
+    /* Hide scrollbar but keep functionality */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--bg-3); }
+
+    /* ====== Cards (nouvelle vue principale) ====== */
+    .cards-container {
+      padding: 4px 14px 14px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .vuln-card {
+      background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: border-color 0.15s, transform 0.05s;
+    }
+    .vuln-card.sev-critical { border-left-color: var(--critical); }
+    .vuln-card.sev-high     { border-left-color: var(--high); }
+    .vuln-card.sev-medium   { border-left-color: var(--medium); }
+    .vuln-card.sev-low      { border-left-color: var(--low); }
+    .vuln-card.sev-info     { border-left-color: var(--info); }
+    .vuln-card.selected { border-color: var(--accent); }
+
+    .card-head {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 12px 14px; cursor: pointer;
+      user-select: none;
+    }
+    .card-head:hover { background: rgba(99, 102, 241, 0.05); }
+    .card-toggle {
+      font-size: 11px; color: var(--text-3);
+      transition: transform 0.18s;
+      margin-top: 3px;
+    }
+    .card.expanded .card-toggle { transform: rotate(90deg); }
+    .card-head-main { flex: 1; min-width: 0; }
+    .card-head-title {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+    .card-head-title strong { font-size: 13.5px; color: var(--text-0); font-weight: 700; }
+    .card-head-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--text-3); }
+    .card-head-meta b { color: var(--text-1); font-weight: 600; }
+    .card-head-desc {
+      font-size: 12.5px; color: var(--text-1); line-height: 1.5; margin-top: 6px;
+      word-break: break-word;
+    }
+    .card-head-desc.collapsed {
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .voir-plus {
+      display: inline-block; margin-top: 4px;
+      color: var(--accent); font-size: 11px; font-weight: 600;
+      cursor: pointer; background: none; border: none; padding: 0;
+    }
+    .voir-plus:hover { text-decoration: underline; }
+
+    .card-body {
+      max-height: 0; overflow: hidden;
+      transition: max-height 0.25s ease;
+      border-top: 1px solid transparent;
+    }
+    .vuln-card.expanded .card-body {
+      max-height: 2400px;
+      border-top-color: var(--border-soft);
+    }
+    .card-section {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .card-section:last-child { border-bottom: none; }
+    .section-label {
+      font-size: 10px; font-weight: 700; color: var(--text-3);
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 6px; justify-content: space-between;
+    }
+    .section-content { font-size: 12.5px; color: var(--text-1); line-height: 1.55; word-break: break-word; }
+
+    .ref-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    }
+    .ref-item {
+      background: var(--bg-0); border: 1px solid var(--border);
+      padding: 8px 10px; border-radius: 6px;
+      font-size: 11.5px;
+    }
+    .ref-item .ref-key { color: var(--text-3); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .ref-item .ref-val { color: var(--text-0); margin-top: 2px; font-weight: 600; }
+    .ref-item a { color: var(--accent); text-decoration: none; }
+    .ref-item a:hover { text-decoration: underline; }
+
+    .cvss-bar {
+      display: flex; align-items: center; gap: 10px;
+      margin-top: 4px;
+    }
+    .cvss-bar-track {
+      flex: 1; height: 8px; background: var(--bg-0);
+      border-radius: 4px; overflow: hidden; border: 1px solid var(--border);
+    }
+    .cvss-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+    .cvss-value { font-size: 16px; font-weight: 800; color: var(--text-0); min-width: 36px; text-align: right; }
+
+    .scan-progress-wrap {
+      padding: 8px 18px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      display: none;
+    }
+    .scan-progress-wrap.visible { display: block; }
+    .scan-progress-bar {
+      height: 4px; background: var(--bg-0); border-radius: 2px; overflow: hidden;
+    }
+    .scan-progress-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--accent) 0%, #8b5cf6 100%);
+      transition: width 0.3s ease;
+      animation: progressShimmer 1.5s ease-in-out infinite;
+    }
+    @keyframes progressShimmer {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .scan-progress-label {
+      font-size: 11px; color: var(--text-2);
+      margin-top: 5px;
+      display: flex; justify-content: space-between;
+    }
+
+    /* Tabs (Résultats | Historique) */
+    .tabs {
+      display: flex; gap: 4px; padding: 8px 18px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      padding: 8px 14px;
+      background: transparent; border: none; cursor: pointer;
+      color: var(--text-3); font-size: 12.5px; font-weight: 600;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab.active { color: var(--text-0); border-bottom-color: var(--accent); }
+    .tab:hover:not(.active) { color: var(--text-1); }
+    .tab-panel { display: none; flex: 1; min-height: 0; overflow: hidden; }
+    .tab-panel.active { display: flex; }
+
+    /* Historique */
+    .history-list {
+      padding: 14px 18px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .history-row {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px;
+      display: grid; grid-template-columns: 1fr 100px 100px 80px;
+      gap: 12px; align-items: center;
+      cursor: pointer;
+    }
+    .history-row:hover { border-color: var(--accent); background: rgba(99,102,241,0.06); }
+    .history-url { font-size: 12px; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .history-meta { font-size: 10px; color: var(--text-3); margin-top: 2px; }
+    .history-stat { font-size: 18px; font-weight: 700; text-align: center; line-height: 1; }
+    .history-stat-label { font-size: 9px; color: var(--text-3); text-align: center; text-transform: uppercase; margin-top: 2px; letter-spacing: 0.04em; }
+
+    /* Responsive */
+    @media (max-width: 1100px) {
+      .main { grid-template-columns: 280px 1fr; }
+      .right { display: none; }
+      .kpi-strip { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 760px) {
+      .main { grid-template-columns: 1fr; }
+      .sidebar, .right { display: none; }
+      .ref-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Backend banner (visible si backend KO) -->
+  <div id="backendBanner" style="display:none;padding:10px 18px;background:#fef2f2;border-bottom:2px solid #dc2626;color:#991b1b;font-size:12.5px;line-height:1.5">
+    ⚠️ <strong>Backend Python indisponible.</strong>
+    Le scan ne pourra pas fonctionner pleinement sans lui. Lancez <code style="background:#fee2e2;padding:1px 4px;border-radius:3px">backend/start.bat</code> dans un terminal.
+    <button id="btnRecheckBackend" style="margin-left:10px;padding:3px 10px;border-radius:4px;background:#dc2626;color:white;border:none;font-size:11px;font-weight:600;cursor:pointer">Re-vérifier</button>
+    <span id="backendBannerError" style="margin-left:8px;color:#7f1d1d;font-size:11px"></span>
+  </div>
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo">🛡️</div>
+      <h1>VulnScan <span class="tag">v1.1</span></h1>
+    </div>
+    <div class="url-pill" id="urlDisplay">—</div>
+    <button class="btn btn-primary" id="btnScan">▶ Lancer un scan</button>
+    <button class="btn btn-danger" id="btnStop" style="display:none">⏹ Arrêter</button>
+    <button class="btn btn-secondary btn-icon" id="btnClear" title="Effacer les résultats">🗑</button>
+  </header>
+
+  <!-- KPI strip -->
+  <section class="kpi-strip">
+    <div class="kpi total">
+      <div class="kpi-label">Total vulnérabilités</div>
+      <div class="kpi-value" id="kpiTotal">0</div>
+      <div class="kpi-sub" id="kpiScore">Score risque : —</div>
+    </div>
+    <div class="kpi critical">
+      <div class="kpi-label">Critique</div>
+      <div class="kpi-value" id="kpiCritical">0</div>
+    </div>
+    <div class="kpi high">
+      <div class="kpi-label">Élevé</div>
+      <div class="kpi-value" id="kpiHigh">0</div>
+    </div>
+    <div class="kpi medium">
+      <div class="kpi-label">Moyen</div>
+      <div class="kpi-value" id="kpiMedium">0</div>
+    </div>
+    <div class="kpi low">
+      <div class="kpi-label">Faible</div>
+      <div class="kpi-value" id="kpiLow">0</div>
+    </div>
+    <div class="kpi info">
+      <div class="kpi-label">Info</div>
+      <div class="kpi-value" id="kpiInfo">0</div>
+    </div>
+  </section>
+
+  <!-- TOOLBAR (filters + search) -->
+  <div class="toolbar">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Rechercher description, type, paramètre, CWE...">
+    </div>
+    <div class="chips" id="filterChips">
+      <div class="chip active" data-filter="all">Toutes <span id="countAll" style="opacity:.7">0</span></div>
+      <div class="chip crit"  data-filter="critical"><span class="dot"></span>Critical <span id="countFCritical" style="opacity:.7">0</span></div>
+      <div class="chip high"  data-filter="high"><span class="dot"></span>High <span id="countFHigh" style="opacity:.7">0</span></div>
+      <div class="chip med"   data-filter="medium"><span class="dot"></span>Medium <span id="countFMedium" style="opacity:.7">0</span></div>
+      <div class="chip low"   data-filter="low"><span class="dot"></span>Low <span id="countFLow" style="opacity:.7">0</span></div>
+      <div class="chip info"  data-filter="info"><span class="dot"></span>Info <span id="countFInfo" style="opacity:.7">0</span></div>
+    </div>
+  </div>
+
+  <!-- Progression temps réel -->
+  <div class="scan-progress-wrap" id="scanProgressWrap">
+    <div class="scan-progress-bar"><div class="scan-progress-fill" id="scanProgressFill"></div></div>
+    <div class="scan-progress-label">
+      <span id="scanProgressStage">En attente</span>
+      <span id="scanProgressPct">0%</span>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" data-tab="results">📋 Résultats <span id="tabResultCount" style="opacity:.6;font-size:10px;margin-left:4px">0</span></button>
+    <button class="tab"        data-tab="history">🕘 Historique <span id="tabHistoryCount" style="opacity:.6;font-size:10px;margin-left:4px">0</span></button>
+    <button class="tab"        data-tab="diff">⇆ Diff</button>
+  </div>
+
+  <!-- MAIN GRID (tab résultats) -->
+  <main class="main tab-panel active" data-tab-panel="results" style="display:grid">
+    <!-- LEFT : graph + types -->
+    <aside class="right" style="border-right:1px solid var(--border);border-left:none">
+      <div>
+        <div class="panel-title">Répartition par sévérité</div>
+        <div class="donut-wrap">
+          <div class="donut-container">
+            <svg class="donut-svg" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#1e293b" stroke-width="3.5"></circle>
+              <circle id="donutCritical" cx="18" cy="18" r="15.9155" fill="transparent" stroke="#ef4444" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 18 18)" stroke-linecap="butt"></circle>
+              <circle id="donutHigh"     cx="18" cy="18" r="15.9155" fill="transparent" stroke="#f97316" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 18 18)" stroke-linecap="butt"></circle>
+              <circle id="donutMedium"   cx="18" cy="18" r="15.9155" fill="transparent" stroke="#eab308" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 18 18)" stroke-linecap="butt"></circle>
+              <circle id="donutLow"      cx="18" cy="18" r="15.9155" fill="transparent" stroke="#22c55e" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 18 18)" stroke-linecap="butt"></circle>
+              <circle id="donutInfo"     cx="18" cy="18" r="15.9155" fill="transparent" stroke="#38bdf8" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 18 18)" stroke-linecap="butt"></circle>
+            </svg>
+            <div class="donut-center">
+              <div class="donut-center-value" id="donutCenterValue">0</div>
+              <div class="donut-center-label">vulns</div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-item"><span class="legend-dot" style="background:#ef4444"></span>Critical <span class="legend-val" id="legendCritical">0</span></div>
+            <div class="legend-item"><span class="legend-dot" style="background:#f97316"></span>High <span class="legend-val" id="legendHigh">0</span></div>
+            <div class="legend-item"><span class="legend-dot" style="background:#eab308"></span>Medium <span class="legend-val" id="legendMedium">0</span></div>
+            <div class="legend-item"><span class="legend-dot" style="background:#22c55e"></span>Low <span class="legend-val" id="legendLow">0</span></div>
+            <div class="legend-item"><span class="legend-dot" style="background:#38bdf8"></span>Info <span class="legend-val" id="legendInfo">0</span></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="panel-title">Top types détectés</div>
+        <div class="types-list" id="typesList">
+          <div class="type-row" style="color:var(--text-4);font-size:11px">Aucune donnée</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER : Cards container (NOUVEAU — remplace sidebar+detail) -->
+    <section style="overflow-y:auto;grid-column:2 / span 2;background:var(--bg-0)">
+      <div class="cards-container" id="cardsContainer">
+        <div class="empty">
+          <div class="empty-icon">🔎</div>
+          <div>Lancez un scan pour voir les vulnérabilités détectées sur la page courante.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- TAB HISTORIQUE -->
+  <main class="tab-panel" data-tab-panel="history" style="flex:1;flex-direction:column;background:var(--bg-0);overflow:hidden">
+    <div style="padding:10px 18px;background:var(--bg-1);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;font-size:12px;color:var(--text-2)">
+      <span>Sélectionnez 2 scans pour les comparer →</span>
+      <span id="cmpHint" style="color:var(--text-3)"></span>
+      <button id="btnCompare" class="btn btn-primary" disabled style="margin-left:auto;padding:5px 16px;font-size:12px">⇆ Comparer</button>
+      <button id="btnClearCmp" class="btn btn-secondary" style="padding:5px 12px;font-size:12px">Effacer sélection</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="empty"><div class="empty-icon">🕘</div><div>Aucun scan dans l'historique.</div></div>
+    </div>
+  </main>
+
+  <!-- TAB DIFF (apparaît après comparaison) -->
+  <main class="tab-panel" data-tab-panel="diff" style="flex:1;flex-direction:column;background:var(--bg-0);overflow-y:auto">
+    <div id="diffContent" style="padding:20px">
+      <div class="empty"><div class="empty-icon">⇆</div><div>Comparez deux scans depuis l'onglet Historique.</div></div>
+    </div>
+  </main>
+
+  <!-- STATUS BAR -->
+  <footer class="statusbar">
+    <div class="status-pill">
+      <span class="status-dot ready" id="statusDot"></span>
+      <span id="scanStatus">Prêt</span>
+    </div>
+    <div class="status-pill">
+      <span class="status-dot" id="backendStatusDot"></span>
+      <span id="backendStatusLabel">Backend : —</span>
+    </div>
+    <div id="scanMeta">—</div>
+    <div class="export-group">
+      <button class="btn btn-secondary" id="btnExportJson">⬇ JSON</button>
+      <button class="btn btn-secondary" id="btnExportXml">⬇ XML</button>
+      <button class="btn btn-secondary" id="btnExportHtml">⬇ HTML</button>
+      <button class="btn btn-secondary" id="btnExportCsv">⬇ CSV</button>
+      <button class="btn btn-secondary" id="btnExportPdf">🖨 PDF</button>
+    </div>
+  </footer>
+
+  <script src="panel.js"></script>
+</body>
+</html>

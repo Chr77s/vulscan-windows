@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>JuiceCorp — Commentaires</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f8fafc; color: #1e293b; }
+    .nav { background: #1e293b; color: white; padding: 14px 30px; display: flex; align-items: center; gap: 20px; }
+    .nav h1 { font-size: 18px; }
+    .nav a { color: #cbd5e1; text-decoration: none; font-size: 14px; }
+    .container { max-width: 760px; margin: 40px auto; padding: 0 30px; }
+    .card { background: white; padding: 24px; border-radius: 10px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .card h2 { color: #4f46e5; margin-bottom: 12px; }
+    textarea, input { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: inherit; font-size: 14px; margin-bottom: 10px; }
+    button { background: #4f46e5; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    .comment { padding: 14px; background: #f8fafc; border-left: 3px solid #6366f1; margin-bottom: 10px; border-radius: 4px; }
+    .comment .author { font-weight: 600; color: #4f46e5; }
+    .comment .text { color: #475569; margin-top: 4px; font-size: 14px; }
+  </style>
+
+  <!-- VULN : Angular 1.6.x vulnérable (prototype pollution) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.6.5/angular.min.js"></script>
+
+  <!-- VULN : Bibliothèque jQuery 2.x obsolète -->
+  <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+</head>
+<body>
+
+  <nav class="nav">
+    <h1>🧃 JuiceCorp</h1>
+    <a href="index.html">Accueil</a>
+    <a href="comments.html">Commentaires</a>
+  </nav>
+
+  <div class="container">
+
+    <div class="card">
+      <h2>💬 Laisser un commentaire</h2>
+
+      <!-- VULN : formulaire POST sans token CSRF -->
+      <form method="POST" action="/api/comments/post">
+        <input type="text" name="author" placeholder="Votre nom">
+        <textarea name="comment" rows="4" placeholder="Votre commentaire..."></textarea>
+        <button type="submit">Publier</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>📝 Derniers commentaires</h2>
+
+      <div class="comment">
+        <div class="author">Alice</div>
+        <div class="text">Super produit, je recommande !</div>
+      </div>
+      <div class="comment">
+        <div class="author">Bob</div>
+        <div class="text">Vous pouvez me contacter à bob.malicious@evilcorp.test pour plus d'infos.</div>
+      </div>
+      <div class="comment" id="userComment">
+        <div class="author">Anonyme</div>
+        <div class="text">Chargement…</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // VULN : innerHTML dynamique sur un commentaire utilisateur (XSS stocké simulé)
+    var saved = new URLSearchParams(location.search).get("c") || "Un commentaire test";
+    document.querySelector("#userComment .text").innerHTML = saved;
+
+    // VULN : document.write basé sur paramètre
+    var theme = new URLSearchParams(location.search).get("theme");
+    if (theme) {
+      document.write("<style>body{background:" + theme + "}</style>");
+    }
+  </script>
+</body>
+</html>

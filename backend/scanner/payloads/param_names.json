@@ -1,0 +1,52 @@
+{
+  "family": "param_names",
+  "version": "1.0.0",
+  "categories": {
+    "common": [
+      {"name": "debug"},      {"name": "test"},       {"name": "admin"},
+      {"name": "id"},         {"name": "user_id"},    {"name": "uid"},
+      {"name": "user"},       {"name": "username"},   {"name": "email"},
+      {"name": "page"},       {"name": "p"},          {"name": "view"},
+      {"name": "action"},     {"name": "type"},       {"name": "mode"},
+      {"name": "category"},   {"name": "cat"},        {"name": "filter"},
+      {"name": "sort"},       {"name": "order"},      {"name": "limit"},
+      {"name": "offset"},     {"name": "from"},       {"name": "to"},
+      {"name": "search"},     {"name": "q"},          {"name": "query"},
+      {"name": "name"},       {"name": "title"},      {"name": "content"}
+    ],
+    "auth": [
+      {"name": "token"},      {"name": "auth"},       {"name": "auth_token"},
+      {"name": "access_token"}, {"name": "api_key"},  {"name": "apikey"},
+      {"name": "key"},        {"name": "secret"},     {"name": "session"},
+      {"name": "sessionid"},  {"name": "sid"},        {"name": "jwt"},
+      {"name": "bearer"},     {"name": "password"},   {"name": "pwd"},
+      {"name": "role"},       {"name": "is_admin"},   {"name": "isAdmin"},
+      {"name": "permission"}
+    ],
+    "feature_flags": [
+      {"name": "debug"},      {"name": "dev"},        {"name": "test"},
+      {"name": "verbose"},    {"name": "trace"},      {"name": "log"},
+      {"name": "logs"},       {"name": "show_errors"}, {"name": "raw"},
+      {"name": "preview"},    {"name": "beta"},       {"name": "experimental"}
+    ],
+    "ssrf_redirect": [
+      {"name": "url"},        {"name": "uri"},        {"name": "src"},
+      {"name": "source"},     {"name": "redirect"},   {"name": "return"},
+      {"name": "next"},       {"name": "target"},     {"name": "dest"},
+      {"name": "destination"}, {"name": "callback"}, {"name": "continue"},
+      {"name": "proxy"},      {"name": "fetch"},      {"name": "webhook"}
+    ],
+    "file": [
+      {"name": "file"},       {"name": "filename"},   {"name": "path"},
+      {"name": "include"},    {"name": "template"},   {"name": "module"},
+      {"name": "doc"},        {"name": "document"},   {"name": "load"},
+      {"name": "read"},       {"name": "open"}
+    ],
+    "ecommerce": [
+      {"name": "product_id"}, {"name": "pid"},        {"name": "sku"},
+      {"name": "order_id"},   {"name": "oid"},        {"name": "invoice_id"},
+      {"name": "cart_id"},    {"name": "coupon"},     {"name": "discount"},
+      {"name": "price"},      {"name": "amount"}
+    ]
+  }
+}

