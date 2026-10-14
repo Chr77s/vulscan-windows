@@ -820,10 +820,15 @@
     </div>
     <div id="scanMeta">—</div>
     <div class="export-group">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-2);margin-right:6px;white-space:nowrap">
+        <input type="checkbox" id="chkIncludeFP" style="accent-color:var(--accent);cursor:pointer">
+        Inclure les faux positifs
+      </label>
       <button class="btn btn-secondary" id="btnExportJson">⬇ JSON</button>
       <button class="btn btn-secondary" id="btnExportXml">⬇ XML</button>
       <button class="btn btn-secondary" id="btnExportHtml">⬇ HTML</button>
       <button class="btn btn-secondary" id="btnExportCsv">⬇ CSV</button>
+      <button class="btn btn-secondary" id="btnExportSarif">⬇ SARIF</button>
       <button class="btn btn-secondary" id="btnExportPdf">🖨 PDF</button>
     </div>
   </footer>

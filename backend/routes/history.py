@@ -7,12 +7,13 @@ Endpoints d'historique des scans (SQLite côté backend).
   POST /history/diff        — compare 2 scans { a, b }
   DELETE /history/<id>      — supprime
   PATCH  /history/triage/<id> — statut de triage { status, note? }
+  GET  /history/trend       — tendance de risque (score, started_at) pour une url
 """
 from flask import Blueprint, request, jsonify
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database.db import init_db, save_scan, list_scans, get_scan, delete_scan, diff_scans, set_triage
+from database.db import init_db, save_scan, list_scans, get_scan, delete_scan, diff_scans, set_triage, risk_trend
 
 history_bp = Blueprint("history", __name__)
 
@@ -58,6 +59,15 @@ def diff():
     if not a or not b:
         return jsonify({"error": "a et b requis"}), 400
     return jsonify(diff_scans(a, b))
+
+
+@history_bp.route("/trend", methods=["GET"])
+def trend():
+    url = request.args.get("url")
+    if not url:
+        return jsonify({"error": "url requis"}), 400
+    limit = int(request.args.get("limit", 10))
+    return jsonify({"trend": risk_trend(url, limit=limit)})
 
 
 @history_bp.route("/triage/<finding_id>", methods=["PATCH"])

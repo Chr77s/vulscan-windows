@@ -80,6 +80,8 @@ async function loadHistory() {
 // =====================================================
 // Thème clair/sombre (Round 7, Task 8)
 // =====================================================
+// Unique lecture GET_CONFIG au démarrage : elle sert aussi à initialiser la case
+// « Inclure les faux positifs » des exports (Round 8, Task 1).
 async function initTheme() {
   let cfg;
   try {
@@ -88,6 +90,8 @@ async function initTheme() {
     cfg = null;
   }
   applyTheme(cfg?.theme === "light" ? "light" : "dark");
+  const chkFP = document.getElementById("chkIncludeFP");
+  if (chkFP) chkFP.checked = !!cfg?.includeFalsePositivesInExport;
 }
 
 // data-theme="light" active le bloc d'overrides CSS ; "dark" = pas d'attribut
@@ -133,6 +137,15 @@ function setupEventListeners() {
   document.getElementById("btnExportPdf").addEventListener("click",  () => exportReport("pdf"));
   const xmlBtn = document.getElementById("btnExportXml");
   if (xmlBtn) xmlBtn.addEventListener("click", () => exportReport("xml"));
+  document.getElementById("btnExportSarif").addEventListener("click", () => exportReport("sarif"));
+  document.getElementById("chkIncludeFP").addEventListener("change", async (e) => {
+    const result = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+    if (!result || result.error) { console.warn("[VulnScan] GET_CONFIG KO, réglage non sauvegardé"); return; }
+    await chrome.runtime.sendMessage({
+      type: "SET_CONFIG",
+      payload: { ...result, includeFalsePositivesInExport: e.target.checked },
+    });
+  });
 
   document.getElementById("searchInput").addEventListener("input", (e) => {
     currentSearch = e.target.value.toLowerCase().trim();
@@ -313,6 +326,10 @@ async function onStartScan() {
     const tabId = chrome.devtools.inspectedWindow.tabId;
     const tab   = await chrome.tabs.get(tabId);
     allVulns = [];
+    // Final fix wave (Fix 2) : le scan précédemment affiché n'est plus celui à
+    // l'écran — sans ce reset, un export en cours de scan retrouverait l'ancien
+    // scan dans scanHistory et en reprendrait l'URL. SCAN_COMPLETED le repositionne.
+    lastScanId = null;
     currentDiscovery = null;
     expandedIds.clear();
     descExpandedIds.clear();
@@ -675,6 +692,12 @@ function buildCardHtml(v) {
             <div class="section-content">${escapeHtml(v.recommendation)}</div>
           </div>` : ""}
 
+        ${v.remediationSnippet ? `
+          <div class="card-section">
+            <div class="section-label">🔧 Exemple de correction</div>
+            <div class="section-content"><pre style="font-family:monospace;font-size:11px;white-space:pre-wrap;background:var(--bg-0);padding:8px;border-radius:6px;color:var(--text-1)">${escapeHtml(v.remediationSnippet)}</pre></div>
+          </div>` : ""}
+
         <div class="card-section">
           <div class="section-label">📚 Références</div>
           <div class="ref-grid">
@@ -735,7 +758,7 @@ function renderHistory() {
     const date = new Date(s.startedAt).toLocaleString("fr-FR");
     const checked = cmpSelection.has(s.id) ? "checked" : "";
     return `
-      <div class="history-row" data-id="${s.id}" style="grid-template-columns:30px 1fr 80px 80px 70px">
+      <div class="history-row" data-id="${s.id}" style="grid-template-columns:30px 1fr 80px 80px 70px 70px">
         <input type="checkbox" class="cmp-check" data-id="${s.id}" ${checked} style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer">
         <div class="hist-info">
           <div class="history-url">${escapeHtml(s.url || "—")}</div>
@@ -753,8 +776,21 @@ function renderHistory() {
           <div class="history-stat" style="color:var(--text-2)">${(s.vulnerabilities || []).length}</div>
           <div class="history-stat-label">Total</div>
         </div>
+        <div style="display:flex;align-items:center;justify-content:center">
+          <span class="sparkline-slot" data-url="${escapeHtml(s.url)}"></span>
+        </div>
       </div>`;
   }).join("");
+
+  // Tendance de risque : une requête backend par URL distincte, pas par ligne
+  const distinctUrls = Array.from(new Set(scanHistory.map(s => s.url).filter(Boolean)));
+  distinctUrls.forEach(async (url) => {
+    const points = await fetchRiskTrend(url);
+    const svg = buildSparklineSvg(points);
+    el.querySelectorAll(".sparkline-slot").forEach(slot => {
+      if (slot.dataset.url === url) slot.innerHTML = svg;
+    });
+  });
 
   // Clic sur la ligne (ailleurs que sur la checkbox) → ouvre le scan
   el.querySelectorAll(".history-row").forEach(row => {
@@ -1251,18 +1287,98 @@ async function onModuleCheckboxChange() {
 // =====================================================
 // EXPORT (JSON / CSV / HTML / PDF / XML)
 // =====================================================
+// Round 8, Task 4 : récupère le scan précédent de la même URL (s'il existe) pour
+// alimenter le résumé exécutif data-driven du rapport HTML/PDF. Appelée depuis
+// exportReport avant buildHTMLReport — reste un fetch isolé et nommé car le
+// Task 6 y fera référence par son nom pour ajouter son propre pré-fetch.
+// Final fix wave (Fix 2) : le filtre `url` de /history/list est un LIKE '%url%'
+// (sous-chaîne) — on ne s'y fie que comme pré-filtre et on garde côté client
+// uniquement l'URL exactement égale ET strictement antérieure au scan exporté
+// (sinon un scan de http://site.com/login, ou un scan plus récent quand on
+// exporte un ancien scan rouvert depuis l'Historique, pouvait servir de
+// « précédent »). limit=100 : la liste backend est triée du plus récent au plus
+// ancien, la borne doit donc dépasser tous les scans plus récents de même
+// sous-chaîne pour atteindre le précédent d'un ancien scan rouvert (l'Historique
+// en garde 50 par défaut) — même borne que fetchHistoryFromBackend.
+async function fetchPriorScanForSummary(url, excludeId, currentStartedAt) {
+  try {
+    const cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+    if (!cfg || cfg.error) return null;
+    const r = await fetch(`${cfg.backendUrl}/history/list?url=${encodeURIComponent(url)}&limit=100`, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const matches = (data.scans || []).filter(s =>
+      s.url === url && s.id !== excludeId && (s.started_at ?? s.startedAt) < currentStartedAt
+    );
+    // scans are already ordered started_at DESC from the backend, so the first
+    // exact match after filtering is the most recent one strictly before this scan
+    return matches[0] || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Round 8, Task 6 : mini-graphique SVG en polyligne (même approche "sans lib de
+// charting" que le donut existant) à partir des points { started_at, score } de
+// risk_trend. Moins de 2 points (0 ou 1 scan pour cette URL) → état neutre, jamais
+// de crash sur Math.min(...[]) (Review Focus #4).
+function buildSparklineSvg(points) {
+  if (!points || points.length < 2) {
+    return `<span style="font-size:10px;color:var(--text-3)">Historique insuffisant</span>`;
+  }
+  const scores = points.map(p => p.score);
+  const min = Math.min(...scores), max = Math.max(...scores);
+  const range = max - min || 1;
+  const w = 60, h = 20;
+  const coords = points.map((p, i) => {
+    const x = (i / (points.length - 1)) * w;
+    const y = h - ((p.score - min) / range) * h;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${coords}" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>`;
+}
+
+// Round 8, Task 6 : tendance de risque (score par scan, le plus ancien en premier)
+// pour une URL donnée — alimente la sparkline de l'onglet Historique et de l'en-tête
+// du rapport HTML/PDF.
+async function fetchRiskTrend(url) {
+  try {
+    const cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+    if (!cfg || cfg.error) return [];
+    const r = await fetch(`${cfg.backendUrl}/history/trend?url=${encodeURIComponent(url)}&limit=10`, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return [];
+    const data = await r.json();
+    return data.trend || [];
+  } catch (e) {
+    return [];
+  }
+}
+
 async function exportReport(format) {
   if (allVulns.length === 0) {
     alert("Aucune vulnérabilité à exporter. Lancez d'abord un scan.");
     return;
   }
+  // Point de filtrage unique (Round 8, Task 1) : appliqué avant le dispatch par
+  // format, donc identique pour JSON/CSV/HTML/XML/PDF (et SARIF plus tard).
+  const includeFP = document.getElementById("chkIncludeFP")?.checked ?? false;
+  const vulnsToExport = includeFP ? allVulns : allVulns.filter(v => v.triageStatus !== "false_positive");
+  // Final fix wave (Fix 2) : l'URL (et l'horodatage de référence du résumé) viennent
+  // du scan réellement ouvert, pas de #urlDisplay (onglet inspecté à l'ouverture du
+  // panel) — un ancien scan rouvert depuis l'Historique peut viser une autre URL.
+  // Repli sur #urlDisplay seulement si le scan n'est pas (encore) dans scanHistory.
+  const openScan = scanHistory.find(s => s.id === lastScanId);
   const scan = {
     id: lastScanId || crypto.randomUUID(),
-    url: document.getElementById("urlDisplay").textContent || "",
+    url: (openScan?.url) || document.getElementById("urlDisplay").textContent || "",
     startedAt: allVulns[0]?.detectedAt || Date.now(),
     finishedAt: Date.now(),
-    vulnerabilities: allVulns,
+    vulnerabilities: vulnsToExport,
   };
+  // started_at côté backend = currentScan.startedAt du service worker : on compare
+  // donc à la même valeur (même source d'horloge) quand le scan est connu, et à
+  // scan.startedAt (detectedAt de la 1re vuln, >= début du scan) sinon.
+  const currentStartedAt = openScan?.startedAt ?? scan.startedAt;
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
   const baseName = `vulnscan-${stamp}`;
 
@@ -1272,11 +1388,17 @@ async function exportReport(format) {
     } else if (format === "csv") {
       downloadBlob(buildCSV(scan), `${baseName}.csv`, "text/csv;charset=utf-8");
     } else if (format === "html") {
-      downloadBlob(buildHTMLReport(scan, false), `${baseName}.html`, "text/html;charset=utf-8");
+      const priorScan = await fetchPriorScanForSummary(scan.url, scan.id, currentStartedAt);
+      const trendPoints = await fetchRiskTrend(scan.url);
+      downloadBlob(buildHTMLReport(scan, false, priorScan, trendPoints), `${baseName}.html`, "text/html;charset=utf-8");
     } else if (format === "xml") {
       downloadBlob(buildXML(scan), `${baseName}.xml`, "application/xml");
+    } else if (format === "sarif") {
+      downloadBlob(buildSARIF(scan), `${baseName}.sarif`, "application/sarif+json");
     } else if (format === "pdf") {
-      openPrintTab(buildHTMLReport(scan, true));
+      const priorScan = await fetchPriorScanForSummary(scan.url, scan.id, currentStartedAt);
+      const trendPoints = await fetchRiskTrend(scan.url);
+      openPrintTab(buildHTMLReport(scan, true, priorScan, trendPoints));
     }
     setStatus("ready", `Rapport ${format.toUpperCase()} prêt`);
   } catch (e) {
@@ -1342,6 +1464,13 @@ function buildCSV(scan) {
   return "﻿" + headers.join(",") + "\n" + rows.join("\n");
 }
 
+// Final fix wave (Fix 3) : un « ]]> » littéral dans un contenu capturé (cible
+// scannée potentiellement hostile) fermerait la section CDATA avant l'heure et
+// permettrait d'injecter de la structure XML — on le scinde en deux sections.
+function cdataSafe(s) {
+  return String(s ?? "").replace(/]]>/g, "]]]]><![CDATA[>");
+}
+
 function buildXML(scan) {
   const esc = (s) => String(s ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -1367,11 +1496,17 @@ function buildXML(scan) {
     if (v.owasp) xml += `      <owasp id="${esc(v.owasp.id)}" url="${esc(v.owasp.url)}">${esc(v.owasp.name)}</owasp>\n`;
     xml += `      <url>${esc(v.url)}</url>\n`;
     if (v.parameter) xml += `      <parameter>${esc(v.parameter)}</parameter>\n`;
-    if (v.payload)   xml += `      <payload><![CDATA[${v.payload}]]></payload>\n`;
+    if (v.payload)   xml += `      <payload><![CDATA[${cdataSafe(v.payload)}]]></payload>\n`;
     xml += `      <description>${esc(v.description)}</description>\n`;
     if (v.impact) xml += `      <impact>${esc(v.impact)}</impact>\n`;
     xml += `      <recommendation>${esc(v.recommendation)}</recommendation>\n`;
-    if (v.evidence) xml += `      <evidence><![CDATA[${v.evidence.slice(0, 1000)}]]></evidence>\n`;
+    if (v.evidence) xml += `      <evidence><![CDATA[${cdataSafe(v.evidence.slice(0, 1000))}]]></evidence>\n`;
+    if (v.evidenceRequest) {
+      xml += `      <evidence-request><![CDATA[${cdataSafe(JSON.stringify(v.evidenceRequest))}]]></evidence-request>\n`;
+    }
+    if (v.evidenceResponse) {
+      xml += `      <evidence-response><![CDATA[${cdataSafe(JSON.stringify(v.evidenceResponse))}]]></evidence-response>\n`;
+    }
     if (v.detectionMethod) xml += `      <detection-method>${esc(v.detectionMethod)}</detection-method>\n`;
     if (v.references && v.references.length) {
       xml += `      <references>\n`;
@@ -1387,11 +1522,74 @@ function buildXML(scan) {
   return xml;
 }
 
-function buildHTMLReport(scan, forPrint) {
+function sarifLevelFor(severity) {
+  return severity === "critical" || severity === "high" ? "error"
+       : severity === "medium" ? "warning"
+       : "note";
+}
+
+function buildSARIF(scan) {
+  return JSON.stringify({
+    version: "2.1.0",
+    $schema: "https://json.schemastore.org/sarif-2.1.0.json",
+    runs: [{
+      tool: {
+        driver: {
+          name: "VulnScan",
+          informationUri: "https://github.com/",
+          version: "1.2",
+          rules: [],
+        },
+      },
+      results: scan.vulnerabilities.map(v => ({
+        ruleId: v.type || "unknown",
+        level: sarifLevelFor(v.severity),
+        message: { text: v.description || v.title || v.type || "Finding" },
+        locations: [{
+          physicalLocation: {
+            artifactLocation: { uri: v.url || scan.url || "" },
+          },
+        }],
+        ...(v.remediationSnippet ? { properties: { remediationSnippet: v.remediationSnippet } } : {}),
+      })),
+    }],
+  }, null, 2);
+}
+
+function buildHTMLReport(scan, forPrint, priorScan, trendPoints) {
   const counts = countBySeverity(scan.vulnerabilities);
   const score = computeRiskScore(counts);
   const risk = riskLevel(score);
   const date = new Date(scan.startedAt).toLocaleString("fr-FR");
+
+  // Round 8, Task 4 : résumé exécutif data-driven — top 3 catégories OWASP par
+  // contribution au score de risque, et delta vs. le scan précédent de la même
+  // URL (s'il existe). priorScan vient de GET /history/list (backend SQLite) :
+  // colonnes brutes snake_case (`critical`, `started_at`), pas le shape camelCase
+  // de currentScan/scanHistory utilisé ailleurs dans ce fichier.
+  const owaspContribution = new Map();
+  for (const v of scan.vulnerabilities) {
+    if (!v.owasp?.id) continue;
+    const weight = SEVERITY_WEIGHT[v.severity] || 0;
+    owaspContribution.set(v.owasp.id, (owaspContribution.get(v.owasp.id) || 0) + weight);
+  }
+  const topOwasp = [...owaspContribution.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id);
+
+  let deltaText = "";
+  if (priorScan) {
+    const priorCritical = (priorScan.critical ?? 0);
+    const deltaCritical = counts.critical - priorCritical;
+    const priorDate = new Date(priorScan.started_at || priorScan.startedAt).toLocaleDateString("fr-FR");
+    deltaText = deltaCritical === 0
+      ? ` Par rapport au scan précédent du ${priorDate}, le nombre de vulnérabilités critiques est stable.`
+      : ` ${deltaCritical > 0 ? "+" : ""}${deltaCritical} critique(s) depuis le dernier scan du ${priorDate}.`;
+  }
+
+  const summaryText = `Ce rapport présente les résultats d'un scan automatisé de <strong>${escapeHtml(scan.url || "")}</strong>
+    effectué le ${date}. Au total, <strong>${scan.vulnerabilities.length}</strong> vulnérabilité(s)
+    ont été identifiées, dont <strong>${counts.critical}</strong> critique(s) et <strong>${counts.high}</strong> élevée(s).
+    Le score de risque calculé est de <strong>${score}</strong>, niveau : <strong>${risk.label}</strong>.${deltaText}
+    ${topOwasp.length ? `Catégories OWASP les plus contributrices au score de risque : <strong>${topOwasp.map(escapeHtml).join(", ")}</strong>.` : ""}`;
 
   const rows = scan.vulnerabilities
     .slice()
@@ -1409,7 +1607,12 @@ function buildHTMLReport(scan, forPrint) {
         <td>${escapeHtml(v.description || "")}</td>
         <td>${escapeHtml(v.impact || "—")}</td>
         <td>${escapeHtml(v.recommendation || "")}</td>
-        <td><pre>${escapeHtml((v.evidence || "").slice(0, 300))}</pre></td>
+        <td><pre>${escapeHtml((v.evidence || "").slice(0, 300))}</pre>${
+          v.evidenceRequest || v.evidenceResponse
+            ? `<details><summary style="cursor:pointer;color:#4f46e5;font-size:10px;margin-top:4px">Requête / Réponse capturée</summary><pre style="margin-top:4px">${escapeHtml(JSON.stringify({ request: v.evidenceRequest, response: v.evidenceResponse }, null, 2).slice(0, 2000))}</pre></details>`
+            : ""
+        }</td>
+        <td>${v.remediationSnippet ? `<pre>${escapeHtml(v.remediationSnippet)}</pre>` : "—"}</td>
       </tr>`).join("");
 
   const autoPrint = forPrint ? `<script>window.addEventListener("load", () => setTimeout(() => window.print(), 300));<\/script>` : "";
@@ -1418,6 +1621,7 @@ function buildHTMLReport(scan, forPrint) {
 <html lang="fr"><head><meta charset="UTF-8">
 <title>VulnScan — Rapport</title>
 <style>
+  :root{--accent:#4f46e5;--text-3:#64748b}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,-apple-system,sans-serif;color:#1e293b;padding:30px;background:#fff}
   header{display:flex;align-items:center;gap:14px;border-bottom:3px solid #4f46e5;padding-bottom:14px;margin-bottom:20px}
@@ -1449,7 +1653,7 @@ function buildHTMLReport(scan, forPrint) {
   a{color:#4f46e5}
   .summary{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:16px 0;font-size:13px;line-height:1.6}
   footer{margin-top:30px;padding-top:14px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:11px;text-align:center}
-  @media print {body{padding:15px}.no-print{display:none}table{font-size:9.5px}pre{max-height:none}}
+  @media print {body{padding:15px}.no-print{display:none}table{font-size:9.5px}pre{max-height:none}tr{page-break-inside:avoid}}
 </style>
 </head><body>
 <header>
@@ -1462,16 +1666,11 @@ function buildHTMLReport(scan, forPrint) {
       <strong>Scan ID :</strong> ${scan.id.slice(0, 8)}
     </div>
   </div>
+  <div style="margin-left:auto">${buildSparklineSvg(trendPoints)}</div>
 </header>
 
 <h2>Résumé exécutif</h2>
-<div class="summary">
-  Ce rapport présente les résultats d'un scan automatisé de <strong>${escapeHtml(scan.url || "")}</strong>
-  effectué le ${date}. Au total, <strong>${scan.vulnerabilities.length}</strong> vulnérabilité(s)
-  ont été identifiées, dont <strong>${counts.critical}</strong> critique(s) et <strong>${counts.high}</strong> élevée(s).
-  Le score de risque calculé est de <strong>${score}</strong>, niveau : <strong>${risk.label}</strong>.
-  Les vulnérabilités les plus prioritaires concernent les catégories OWASP Top 10 listées dans le tableau ci-dessous.
-</div>
+<div class="summary">${summaryText}</div>
 
 <div class="kpis">
   <div class="kpi tot"><div class="v">${scan.vulnerabilities.length}</div><div class="l">Total</div></div>
@@ -1487,9 +1686,9 @@ function buildHTMLReport(scan, forPrint) {
 <h2>Détail des vulnérabilités</h2>
 <table>
   <thead>
-    <tr><th>Sévérité</th><th>Titre</th><th>CVSS</th><th>CWE</th><th>OWASP</th><th>Conf.</th><th>URL</th><th>Paramètre</th><th>Description</th><th>Impact</th><th>Recommandation</th><th>Preuve</th></tr>
+    <tr><th>Sévérité</th><th>Titre</th><th>CVSS</th><th>CWE</th><th>OWASP</th><th>Conf.</th><th>URL</th><th>Paramètre</th><th>Description</th><th>Impact</th><th>Recommandation</th><th>Preuve</th><th>Correction</th></tr>
   </thead>
-  <tbody>${rows || '<tr><td colspan="12" style="text-align:center;color:#94a3b8;padding:20px">Aucune vulnérabilité</td></tr>'}</tbody>
+  <tbody>${rows || '<tr><td colspan="13" style="text-align:center;color:#94a3b8;padding:20px">Aucune vulnérabilité</td></tr>'}</tbody>
 </table>
 
 <footer>
