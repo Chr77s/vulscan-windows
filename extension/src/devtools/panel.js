@@ -1570,7 +1570,7 @@ function buildHTMLReport(scan, forPrint, priorScan, trendPoints) {
   const owaspContribution = new Map();
   for (const v of scan.vulnerabilities) {
     if (!v.owasp?.id) continue;
-    const weight = { critical: 10, high: 6, medium: 3, low: 1, info: 0 }[v.severity] || 0;
+    const weight = SEVERITY_WEIGHT[v.severity] || 0;
     owaspContribution.set(v.owasp.id, (owaspContribution.get(v.owasp.id) || 0) + weight);
   }
   const topOwasp = [...owaspContribution.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id);
@@ -1589,7 +1589,7 @@ function buildHTMLReport(scan, forPrint, priorScan, trendPoints) {
     effectué le ${date}. Au total, <strong>${scan.vulnerabilities.length}</strong> vulnérabilité(s)
     ont été identifiées, dont <strong>${counts.critical}</strong> critique(s) et <strong>${counts.high}</strong> élevée(s).
     Le score de risque calculé est de <strong>${score}</strong>, niveau : <strong>${risk.label}</strong>.${deltaText}
-    ${topOwasp.length ? `Catégories OWASP les plus contributrices au score de risque : <strong>${topOwasp.join(", ")}</strong>.` : ""}`;
+    ${topOwasp.length ? `Catégories OWASP les plus contributrices au score de risque : <strong>${topOwasp.map(escapeHtml).join(", ")}</strong>.` : ""}`;
 
   const rows = scan.vulnerabilities
     .slice()
