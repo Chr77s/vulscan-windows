@@ -781,6 +781,15 @@
 
   <!-- TAB TRAFIC (requêtes/réponses HTTP capturées) -->
   <main class="tab-panel" data-tab-panel="traffic" style="flex:1;flex-direction:column;background:var(--bg-0);overflow-y:auto">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 18px 0;font-size:12px;color:var(--text-2)">
+      <label for="trafficSortSelect">Trier par :</label>
+      <select id="trafficSortSelect" style="background:var(--bg-1);border:1px solid var(--border);border-radius:6px;color:var(--text-1);font-size:12px;padding:4px 8px">
+        <option value="default">Ordre de capture</option>
+        <option value="method">Méthode</option>
+        <option value="status">Statut</option>
+        <option value="severity">Sévérité du finding lié</option>
+      </select>
+    </div>
     <div class="cards-container" id="trafficList">
       <div class="empty"><div class="empty-icon">🌐</div><div>Aucune requête HTTP capturée pour l'instant.</div></div>
     </div>
@@ -833,6 +842,7 @@
     </div>
   </footer>
 
+  <script src="../utils/export-builders.js"></script>
   <script src="panel.js"></script>
 </body>
 </html>
