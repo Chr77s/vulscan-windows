@@ -9,6 +9,7 @@ def test_run_scan_discovery_includes_full_form_list(mocker):
     fake_engine = mocker.Mock()
     fake_engine.run.return_value = []
     fake_engine.list_modules.return_value = [{"name": "headers", "default_enabled": True}]
+    fake_engine.last_module_log = []
     mocker.patch("routes.scanner_engine.get_engine", return_value=fake_engine)
 
     forms = [{"action": "http://x/login", "method": "POST",

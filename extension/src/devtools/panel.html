@@ -481,6 +481,24 @@
       margin-top: 5px;
       display: flex; justify-content: space-between;
     }
+    .module-log-console {
+      display: none;
+      margin-top: 8px;
+      max-height: 110px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: 11.5px;
+      color: #cbd5e1;
+      background: var(--bg-0);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      padding: 6px 10px;
+    }
+    .module-log-console.visible { display: block; }
+    .module-log-console .module-log-line {
+      white-space: pre-wrap; word-break: break-word;
+      line-height: 1.5;
+    }
 
     /* Tabs (Résultats | Historique) */
     .tabs {
@@ -603,6 +621,7 @@
       <span id="scanProgressStage">En attente</span>
       <span id="scanProgressPct">0%</span>
     </div>
+    <div class="module-log-console" id="moduleLogConsole"></div>
   </div>
 
   <!-- TABS -->

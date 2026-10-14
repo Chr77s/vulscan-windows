@@ -50,6 +50,25 @@ def test_engine_run_disabled_module():
     assert findings == []
 
 
+def test_engine_run_records_per_module_log():
+    from scanner.core.engine import ScannerEngine
+    from scanner.core.module_base import ScannerModule, Finding
+
+    class FakeModule(ScannerModule):
+        name = "fake"
+        category = "test"
+        default_enabled = True
+        def scan(self, target, context):
+            return [Finding(type="fake", severity="low", description="d", recommendation="r", url=target)]
+
+    engine = ScannerEngine()
+    engine.register(FakeModule)
+    engine.run("http://example.com", context={"crawled": {"urls": [], "forms": [], "api_endpoints": [], "stats": {}}}, enabled=["fake"], crawl=False)
+
+    assert engine.last_module_log == [{"module": "fake", "findings": 1, "elapsed_ms": engine.last_module_log[0]["elapsed_ms"]}]
+    assert engine.last_module_log[0]["elapsed_ms"] >= 0
+
+
 def test_engine_auto_discovery():
     """Vérifie qu'on découvre bien les modules du package scanner.modules."""
     engine = ScannerEngine()

@@ -17,6 +17,7 @@ let currentTab     = "results";
 let scanHistory    = [];
 let cmpSelection   = new Set();  // ids des scans sélectionnés pour comparaison
 let trafficExpandedIds = new Set();  // ids des lignes "Trafic" dépliées
+let moduleLogLines = [];  // console d'activité par module (Round 7) — capée à 50 lignes
 
 const SEVERITY_ORDER  = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const SEVERITY_WEIGHT = { critical: 10, high: 6, medium: 3, low: 1, info: 0 };
@@ -156,7 +157,38 @@ function setupRuntimeListeners() {
     if (message.type === "BACKEND_STATUS") {
       updateBackendUI(message.payload);
     }
+    if (message.type === "MODULE_LOG") {
+      appendModuleLog(message.payload || []);
+    }
   });
+}
+
+// =====================================================
+// Console d'activité par module (Round 7)
+// =====================================================
+function appendModuleLog(entries) {
+  for (const e of entries) {
+    moduleLogLines.push(`✓ ${e.module} — ${e.findings} findings (${e.elapsedMs}ms)`);
+  }
+  if (moduleLogLines.length > 50) {
+    moduleLogLines = moduleLogLines.slice(moduleLogLines.length - 50);
+  }
+  renderModuleLog();
+}
+
+function renderModuleLog() {
+  const el = document.getElementById("moduleLogConsole");
+  if (!el) return;
+  if (moduleLogLines.length === 0) {
+    el.classList.remove("visible");
+    el.innerHTML = "";
+    return;
+  }
+  el.classList.add("visible");
+  el.innerHTML = moduleLogLines
+    .map((line) => `<div class="module-log-line">${escapeHtml(line)}</div>`)
+    .join("");
+  el.scrollTop = el.scrollHeight;
 }
 
 function switchTab(name) {
@@ -207,6 +239,8 @@ async function onStartScan() {
     currentDiscovery = null;
     expandedIds.clear();
     descExpandedIds.clear();
+    moduleLogLines = [];
+    renderModuleLog();
     renderAll();
     setStatus("scanning", "Initialisation...");
     setScanningState(true);

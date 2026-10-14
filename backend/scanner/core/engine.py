@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Optional, Type
 import importlib
 import logging
 import pkgutil
+import time
 
 from .module_base import ScannerModule, Finding
 
@@ -23,6 +24,7 @@ logger = logging.getLogger("vulnscan.engine")
 class ScannerEngine:
     def __init__(self):
         self._modules: Dict[str, Type[ScannerModule]] = {}
+        self.last_module_log: List[Dict[str, Any]] = []
 
     # -----------------------------------------------------------------
     # Enregistrement
@@ -90,14 +92,26 @@ class ScannerEngine:
             else [cls for cls in self._modules.values() if cls.default_enabled]
         )
 
+        module_log: List[Dict[str, Any]] = []
         for cls in modules_to_run:
+            t0 = time.monotonic()
             try:
                 instance = cls()
                 result = instance.scan(target, context) or []
                 logger.info(f"  ↳ {cls.name} : {len(result)} findings")
                 findings.extend(result)
+                module_log.append({
+                    "module": cls.name,
+                    "findings": len(result),
+                    "elapsed_ms": round((time.monotonic() - t0) * 1000, 1),
+                })
             except Exception as e:
                 logger.exception(f"Module {cls.name} a crashé : {e}")
+                module_log.append({
+                    "module": cls.name,
+                    "findings": 0,
+                    "elapsed_ms": round((time.monotonic() - t0) * 1000, 1),
+                })
 
         # Fusion bayésienne
         merged = self._bayesian_merge(findings)
@@ -110,6 +124,7 @@ class ScannerEngine:
         except Exception as e:
             logger.warning(f"Inférence ignorée : {e}")
 
+        self.last_module_log = module_log
         return merged
 
     # -----------------------------------------------------------------
