@@ -1264,6 +1264,24 @@ async function onModuleCheckboxChange() {
 // =====================================================
 // EXPORT (JSON / CSV / HTML / PDF / XML)
 // =====================================================
+// Round 8, Task 4 : récupère le scan précédent de la même URL (s'il existe) pour
+// alimenter le résumé exécutif data-driven du rapport HTML/PDF. Appelée depuis
+// exportReport avant buildHTMLReport — reste un fetch isolé et nommé car le
+// Task 6 y fera référence par son nom pour ajouter son propre pré-fetch.
+async function fetchPriorScanForSummary(url, excludeId) {
+  try {
+    const cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+    if (!cfg || cfg.error) return null;
+    const r = await fetch(`${cfg.backendUrl}/history/list?url=${encodeURIComponent(url)}&limit=2`, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const prior = (data.scans || []).find(s => s.id !== excludeId);
+    return prior || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function exportReport(format) {
   if (allVulns.length === 0) {
     alert("Aucune vulnérabilité à exporter. Lancez d'abord un scan.");
@@ -1289,13 +1307,15 @@ async function exportReport(format) {
     } else if (format === "csv") {
       downloadBlob(buildCSV(scan), `${baseName}.csv`, "text/csv;charset=utf-8");
     } else if (format === "html") {
-      downloadBlob(buildHTMLReport(scan, false), `${baseName}.html`, "text/html;charset=utf-8");
+      const priorScan = await fetchPriorScanForSummary(scan.url, scan.id);
+      downloadBlob(buildHTMLReport(scan, false, priorScan), `${baseName}.html`, "text/html;charset=utf-8");
     } else if (format === "xml") {
       downloadBlob(buildXML(scan), `${baseName}.xml`, "application/xml");
     } else if (format === "sarif") {
       downloadBlob(buildSARIF(scan), `${baseName}.sarif`, "application/sarif+json");
     } else if (format === "pdf") {
-      openPrintTab(buildHTMLReport(scan, true));
+      const priorScan = await fetchPriorScanForSummary(scan.url, scan.id);
+      openPrintTab(buildHTMLReport(scan, true, priorScan));
     }
     setStatus("ready", `Rapport ${format.toUpperCase()} prêt`);
   } catch (e) {
@@ -1445,11 +1465,40 @@ function buildSARIF(scan) {
   }, null, 2);
 }
 
-function buildHTMLReport(scan, forPrint) {
+function buildHTMLReport(scan, forPrint, priorScan) {
   const counts = countBySeverity(scan.vulnerabilities);
   const score = computeRiskScore(counts);
   const risk = riskLevel(score);
   const date = new Date(scan.startedAt).toLocaleString("fr-FR");
+
+  // Round 8, Task 4 : résumé exécutif data-driven — top 3 catégories OWASP par
+  // contribution au score de risque, et delta vs. le scan précédent de la même
+  // URL (s'il existe). priorScan vient de GET /history/list (backend SQLite) :
+  // colonnes brutes snake_case (`critical`, `started_at`), pas le shape camelCase
+  // de currentScan/scanHistory utilisé ailleurs dans ce fichier.
+  const owaspContribution = new Map();
+  for (const v of scan.vulnerabilities) {
+    if (!v.owasp?.id) continue;
+    const weight = { critical: 10, high: 6, medium: 3, low: 1, info: 0 }[v.severity] || 0;
+    owaspContribution.set(v.owasp.id, (owaspContribution.get(v.owasp.id) || 0) + weight);
+  }
+  const topOwasp = [...owaspContribution.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id);
+
+  let deltaText = "";
+  if (priorScan) {
+    const priorCritical = (priorScan.critical ?? 0);
+    const deltaCritical = counts.critical - priorCritical;
+    const priorDate = new Date(priorScan.started_at || priorScan.startedAt).toLocaleDateString("fr-FR");
+    deltaText = deltaCritical === 0
+      ? ` Par rapport au scan précédent du ${priorDate}, le nombre de vulnérabilités critiques est stable.`
+      : ` ${deltaCritical > 0 ? "+" : ""}${deltaCritical} critique(s) depuis le dernier scan du ${priorDate}.`;
+  }
+
+  const summaryText = `Ce rapport présente les résultats d'un scan automatisé de <strong>${escapeHtml(scan.url || "")}</strong>
+    effectué le ${date}. Au total, <strong>${scan.vulnerabilities.length}</strong> vulnérabilité(s)
+    ont été identifiées, dont <strong>${counts.critical}</strong> critique(s) et <strong>${counts.high}</strong> élevée(s).
+    Le score de risque calculé est de <strong>${score}</strong>, niveau : <strong>${risk.label}</strong>.${deltaText}
+    ${topOwasp.length ? `Catégories OWASP les plus contributrices au score de risque : <strong>${topOwasp.join(", ")}</strong>.` : ""}`;
 
   const rows = scan.vulnerabilities
     .slice()
@@ -1527,13 +1576,7 @@ function buildHTMLReport(scan, forPrint) {
 </header>
 
 <h2>Résumé exécutif</h2>
-<div class="summary">
-  Ce rapport présente les résultats d'un scan automatisé de <strong>${escapeHtml(scan.url || "")}</strong>
-  effectué le ${date}. Au total, <strong>${scan.vulnerabilities.length}</strong> vulnérabilité(s)
-  ont été identifiées, dont <strong>${counts.critical}</strong> critique(s) et <strong>${counts.high}</strong> élevée(s).
-  Le score de risque calculé est de <strong>${score}</strong>, niveau : <strong>${risk.label}</strong>.
-  Les vulnérabilités les plus prioritaires concernent les catégories OWASP Top 10 listées dans le tableau ci-dessous.
-</div>
+<div class="summary">${summaryText}</div>
 
 <div class="kpis">
   <div class="kpi tot"><div class="v">${scan.vulnerabilities.length}</div><div class="l">Total</div></div>
