@@ -15,10 +15,10 @@ Note : on cherche ces injections sur l'URL cible + les URLs découvertes par le 
 """
 from __future__ import annotations
 from typing import List, Dict, Any
-import requests
 import secrets
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -51,23 +51,23 @@ class HeaderInjectionModule(ScannerModule):
                 urls_to_test.append(u)
 
         for url in urls_to_test:
-            findings.extend(self._fuzz_headers(url))
+            findings.extend(self._fuzz_headers(url, context))
         return findings
 
-    def _fuzz_headers(self, url: str) -> List[Finding]:
+    def _fuzz_headers(self, url: str, context: Dict[str, Any]) -> List[Finding]:
         findings = []
         # Baseline
         try:
-            baseline = requests.get(url, timeout=8,
-                                    headers={"User-Agent": "VulnScan/1.3"})
+            baseline = http.get(url, context, timeout=8,
+                                headers={"User-Agent": "VulnScan/1.3"})
         except Exception:
             return []
 
         for header_name in self.HEADERS_TESTED:
-            findings.extend(self._test_header(url, header_name, baseline))
+            findings.extend(self._test_header(url, header_name, baseline, context))
         return findings
 
-    def _test_header(self, url: str, header_name: str, baseline) -> List[Finding]:
+    def _test_header(self, url: str, header_name: str, baseline, context: Dict[str, Any]) -> List[Finding]:
         findings = []
         mark = "vsh" + secrets.token_hex(3)
 
@@ -83,8 +83,10 @@ class HeaderInjectionModule(ScannerModule):
                 headers[header_name] = p_value
 
             try:
-                r = requests.get(url, headers=headers, timeout=8, allow_redirects=False)
+                r = http.get(url, context, headers=headers, timeout=8, allow_redirects=False)
             except Exception:
+                continue
+            if r is None:
                 continue
 
             body = r.text

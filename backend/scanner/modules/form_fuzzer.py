@@ -17,11 +17,11 @@ Pour chaque formulaire découvert par le crawler :
 """
 from __future__ import annotations
 from typing import List, Dict, Any
-import requests
 import secrets
 import difflib
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -73,10 +73,10 @@ class FormFuzzerModule(ScannerModule):
 
         findings: List[Finding] = []
         for form in safe_forms:
-            findings.extend(self._fuzz_form(form))
+            findings.extend(self._fuzz_form(form, context))
         return findings
 
-    def _fuzz_form(self, form: Dict[str, Any]) -> List[Finding]:
+    def _fuzz_form(self, form: Dict[str, Any], context: Dict[str, Any]) -> List[Finding]:
         findings: List[Finding] = []
         action = form["action"]
         method = form["method"]
@@ -87,7 +87,7 @@ class FormFuzzerModule(ScannerModule):
         # Construire un baseline avec valeurs neutres
         baseline_data = {f["name"]: f.get("value") or "test" for f in fields}
         try:
-            baseline = self._send(action, method, baseline_data)
+            baseline = self._send(action, method, baseline_data, context)
             if baseline is None:
                 return []
         except Exception:
@@ -107,7 +107,7 @@ class FormFuzzerModule(ScannerModule):
                 test_data[field["name"]] = payload_str
 
                 try:
-                    r = self._send(action, method, test_data)
+                    r = self._send(action, method, test_data, context)
                     if r is None:
                         continue
                 except Exception:
@@ -143,15 +143,15 @@ class FormFuzzerModule(ScannerModule):
         return findings
 
     @staticmethod
-    def _send(action: str, method: str, data: dict) -> str | None:
+    def _send(action: str, method: str, data: dict, context: Dict[str, Any]) -> str | None:
         try:
             if method.upper() == "POST":
-                r = requests.post(action, data=data, timeout=8,
-                                  headers={"User-Agent": "VulnScan/1.3"})
+                r = http.post(action, context, data=data, timeout=8,
+                              headers={"User-Agent": "VulnScan/1.3"})
             else:
-                r = requests.get(action, params=data, timeout=8,
-                                 headers={"User-Agent": "VulnScan/1.3"})
-            return r.text
+                r = http.get(action, context, params=data, timeout=8,
+                             headers={"User-Agent": "VulnScan/1.3"})
+            return r.text if r is not None else None
         except Exception:
             return None
 

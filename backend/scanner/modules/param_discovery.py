@@ -18,10 +18,10 @@ Stratégie :
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
-import requests
 import difflib
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 from scanner.payloads import get_payloads
 
@@ -43,8 +43,8 @@ class ParamDiscoveryModule(ScannerModule):
 
         # Baseline
         try:
-            r_base = requests.get(target, timeout=8,
-                                  headers={"User-Agent": "VulnScan/1.3"})
+            r_base = http.get(target, context, timeout=8,
+                              headers={"User-Agent": "VulnScan/1.3"})
             body_base = r_base.text
             base_size = len(body_base)
         except Exception:
@@ -69,8 +69,8 @@ class ParamDiscoveryModule(ScannerModule):
             test_url = urlunparse(parsed._replace(query=urlencode(test_params)))
 
             try:
-                r = requests.get(test_url, timeout=5,
-                                 headers={"User-Agent": "VulnScan/1.3"})
+                r = http.get(test_url, context, timeout=5,
+                             headers={"User-Agent": "VulnScan/1.3"})
                 body = r.text
             except Exception:
                 continue

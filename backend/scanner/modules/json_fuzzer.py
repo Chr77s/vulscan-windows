@@ -15,11 +15,11 @@ Stratégie :
 """
 from __future__ import annotations
 from typing import List, Dict, Any
-import requests
 import secrets
 import json
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -55,7 +55,7 @@ class JsonFuzzerModule(ScannerModule):
 
         findings: List[Finding] = []
         for ep in endpoints[:self.MAX_ENDPOINTS]:
-            findings.extend(self._fuzz_endpoint(ep))
+            findings.extend(self._fuzz_endpoint(ep, context))
         return findings
 
     def _find_api_endpoints(self, target: str, context: Dict[str, Any]) -> List[str]:
@@ -72,14 +72,14 @@ class JsonFuzzerModule(ScannerModule):
                 urls.add(u)
         return sorted(urls)
 
-    def _fuzz_endpoint(self, url: str) -> List[Finding]:
+    def _fuzz_endpoint(self, url: str, context: Dict[str, Any]) -> List[Finding]:
         findings: List[Finding] = []
 
         # Baseline JSON minimal — on tente avec un payload neutre pour voir si l'API accepte
         baseline_body = {"id": 1, "name": "test", "value": "baseline"}
         try:
-            r_base = requests.post(url, json=baseline_body, timeout=8,
-                                   headers={"User-Agent": "VulnScan/1.3"})
+            r_base = http.post(url, context, json=baseline_body, timeout=8,
+                               headers={"User-Agent": "VulnScan/1.3"})
             if r_base.status_code in (404, 405, 415):
                 return []  # endpoint pas valide / méthode pas supportée
         except Exception:
@@ -99,8 +99,8 @@ class JsonFuzzerModule(ScannerModule):
                 test_body = dict(baseline_body)
                 test_body[key] = val_str
                 try:
-                    r = requests.post(url, json=test_body, timeout=8,
-                                      headers={"User-Agent": "VulnScan/1.3"})
+                    r = http.post(url, context, json=test_body, timeout=8,
+                                  headers={"User-Agent": "VulnScan/1.3"})
                     body = r.text
                 except Exception:
                     continue

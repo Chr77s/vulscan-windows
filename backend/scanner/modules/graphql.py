@@ -15,9 +15,9 @@ Référence : https://github.com/dolevf/graphql-cop
 """
 from __future__ import annotations
 from typing import List, Dict, Any
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -53,7 +53,7 @@ class GraphQLModule(ScannerModule):
 
         findings: List[Finding] = []
         for ep in endpoints[:3]:
-            findings.extend(self._test_endpoint(ep))
+            findings.extend(self._test_endpoint(ep, context))
         return findings
 
     def _discover_endpoints(self, target: str, context: Dict[str, Any]) -> List[str]:
@@ -74,21 +74,21 @@ class GraphQLModule(ScannerModule):
             for h in ["/graphql", "/api/graphql"]:
                 # On tente une probe légère
                 try:
-                    r = requests.post(base + h, json={"query": "{__typename}"},
-                                      timeout=5, headers={"User-Agent": "VulnScan/1.4"})
+                    r = http.post(base + h, context, json={"query": "{__typename}"},
+                                  timeout=5, headers={"User-Agent": "VulnScan/1.4"})
                     if r.status_code != 404 and ("data" in r.text or "errors" in r.text):
                         candidates.add(base + h)
                 except Exception:
                     continue
         return sorted(candidates)
 
-    def _test_endpoint(self, url: str) -> List[Finding]:
+    def _test_endpoint(self, url: str, context: Dict[str, Any]) -> List[Finding]:
         findings: List[Finding] = []
 
         # 1. Introspection
         try:
-            r = requests.post(url, json=self.INTROSPECTION_QUERY,
-                              timeout=8, headers={"User-Agent": "VulnScan/1.4"})
+            r = http.post(url, context, json=self.INTROSPECTION_QUERY,
+                          timeout=8, headers={"User-Agent": "VulnScan/1.4"})
             body = r.text
             if r.status_code == 200 and ("__schema" in body and "types" in body):
                 findings.append(Finding(
@@ -115,8 +115,8 @@ class GraphQLModule(ScannerModule):
 
         # 2. Suggestion non désactivée ('Did you mean...')
         try:
-            r = requests.post(url, json=self.SUGGESTION_QUERY,
-                              timeout=8, headers={"User-Agent": "VulnScan/1.4"})
+            r = http.post(url, context, json=self.SUGGESTION_QUERY,
+                          timeout=8, headers={"User-Agent": "VulnScan/1.4"})
             if "Did you mean" in r.text:
                 findings.append(Finding(
                     type="graphql-suggestion", severity="low",
@@ -139,8 +139,8 @@ class GraphQLModule(ScannerModule):
 
         # 3. Batching activé → DoS potentiel
         try:
-            r = requests.post(url, json=self.BATCH_QUERY,
-                              timeout=8, headers={"User-Agent": "VulnScan/1.4"})
+            r = http.post(url, context, json=self.BATCH_QUERY,
+                          timeout=8, headers={"User-Agent": "VulnScan/1.4"})
             if r.status_code == 200 and r.text.strip().startswith("[") and "__typename" in r.text:
                 findings.append(Finding(
                     type="graphql-batch", severity="medium",
@@ -170,8 +170,8 @@ class GraphQLModule(ScannerModule):
                 "query": "query($id: ID!) { user(id: $id) { name } }",
                 "variables": {"id": "1' OR '1'='1"},
             }
-            r = requests.post(url, json=sqli_payload, timeout=8,
-                              headers={"User-Agent": "VulnScan/1.4"})
+            r = http.post(url, context, json=sqli_payload, timeout=8,
+                          headers={"User-Agent": "VulnScan/1.4"})
             if re.search(r"sql syntax|sqlite|mysql|postgres|ora-\d", r.text, re.I):
                 findings.append(Finding(
                     type="sqli", severity="critical",
