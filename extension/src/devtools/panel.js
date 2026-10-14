@@ -137,6 +137,7 @@ function setupEventListeners() {
   document.getElementById("btnExportPdf").addEventListener("click",  () => exportReport("pdf"));
   const xmlBtn = document.getElementById("btnExportXml");
   if (xmlBtn) xmlBtn.addEventListener("click", () => exportReport("xml"));
+  document.getElementById("btnExportSarif").addEventListener("click", () => exportReport("sarif"));
   document.getElementById("chkIncludeFP").addEventListener("change", async (e) => {
     const result = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
     if (!result || result.error) { console.warn("[VulnScan] GET_CONFIG KO, réglage non sauvegardé"); return; }
@@ -1291,6 +1292,8 @@ async function exportReport(format) {
       downloadBlob(buildHTMLReport(scan, false), `${baseName}.html`, "text/html;charset=utf-8");
     } else if (format === "xml") {
       downloadBlob(buildXML(scan), `${baseName}.xml`, "application/xml");
+    } else if (format === "sarif") {
+      downloadBlob(buildSARIF(scan), `${baseName}.sarif`, "application/sarif+json");
     } else if (format === "pdf") {
       openPrintTab(buildHTMLReport(scan, true));
     }
@@ -1407,6 +1410,39 @@ function buildXML(scan) {
   xml += '  </findings>\n';
   xml += '</vulnscan-report>\n';
   return xml;
+}
+
+function sarifLevelFor(severity) {
+  return severity === "critical" || severity === "high" ? "error"
+       : severity === "medium" ? "warning"
+       : "note";
+}
+
+function buildSARIF(scan) {
+  return JSON.stringify({
+    version: "2.1.0",
+    $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+    runs: [{
+      tool: {
+        driver: {
+          name: "VulnScan",
+          informationUri: "https://github.com/",
+          version: "1.2",
+          rules: [],
+        },
+      },
+      results: scan.vulnerabilities.map(v => ({
+        ruleId: v.type || "unknown",
+        level: sarifLevelFor(v.severity),
+        message: { text: v.description || v.title || v.type || "Finding" },
+        locations: [{
+          physicalLocation: {
+            artifactLocation: { uri: v.url || scan.url || "" },
+          },
+        }],
+      })),
+    }],
+  }, null, 2);
 }
 
 function buildHTMLReport(scan, forPrint) {
