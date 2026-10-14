@@ -754,7 +754,7 @@ function renderHistory() {
     const date = new Date(s.startedAt).toLocaleString("fr-FR");
     const checked = cmpSelection.has(s.id) ? "checked" : "";
     return `
-      <div class="history-row" data-id="${s.id}" style="grid-template-columns:30px 1fr 80px 80px 70px">
+      <div class="history-row" data-id="${s.id}" style="grid-template-columns:30px 1fr 80px 80px 70px 70px">
         <input type="checkbox" class="cmp-check" data-id="${s.id}" ${checked} style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer">
         <div class="hist-info">
           <div class="history-url">${escapeHtml(s.url || "—")}</div>
@@ -772,8 +772,21 @@ function renderHistory() {
           <div class="history-stat" style="color:var(--text-2)">${(s.vulnerabilities || []).length}</div>
           <div class="history-stat-label">Total</div>
         </div>
+        <div style="display:flex;align-items:center;justify-content:center">
+          <span class="sparkline-slot" data-url="${escapeHtml(s.url)}"></span>
+        </div>
       </div>`;
   }).join("");
+
+  // Tendance de risque : une requête backend par URL distincte, pas par ligne
+  const distinctUrls = Array.from(new Set(scanHistory.map(s => s.url).filter(Boolean)));
+  distinctUrls.forEach(async (url) => {
+    const points = await fetchRiskTrend(url);
+    const svg = buildSparklineSvg(points);
+    el.querySelectorAll(".sparkline-slot").forEach(slot => {
+      if (slot.dataset.url === url) slot.innerHTML = svg;
+    });
+  });
 
   // Clic sur la ligne (ailleurs que sur la checkbox) → ouvre le scan
   el.querySelectorAll(".history-row").forEach(row => {
@@ -1288,6 +1301,42 @@ async function fetchPriorScanForSummary(url, excludeId) {
   }
 }
 
+// Round 8, Task 6 : mini-graphique SVG en polyligne (même approche "sans lib de
+// charting" que le donut existant) à partir des points { started_at, score } de
+// risk_trend. Moins de 2 points (0 ou 1 scan pour cette URL) → état neutre, jamais
+// de crash sur Math.min(...[]) (Review Focus #4).
+function buildSparklineSvg(points) {
+  if (!points || points.length < 2) {
+    return `<span style="font-size:10px;color:var(--text-3)">Historique insuffisant</span>`;
+  }
+  const scores = points.map(p => p.score);
+  const min = Math.min(...scores), max = Math.max(...scores);
+  const range = max - min || 1;
+  const w = 60, h = 20;
+  const coords = points.map((p, i) => {
+    const x = (i / (points.length - 1)) * w;
+    const y = h - ((p.score - min) / range) * h;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${coords}" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>`;
+}
+
+// Round 8, Task 6 : tendance de risque (score par scan, le plus ancien en premier)
+// pour une URL donnée — alimente la sparkline de l'onglet Historique et de l'en-tête
+// du rapport HTML/PDF.
+async function fetchRiskTrend(url) {
+  try {
+    const cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+    if (!cfg || cfg.error) return [];
+    const r = await fetch(`${cfg.backendUrl}/history/trend?url=${encodeURIComponent(url)}&limit=10`, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return [];
+    const data = await r.json();
+    return data.trend || [];
+  } catch (e) {
+    return [];
+  }
+}
+
 async function exportReport(format) {
   if (allVulns.length === 0) {
     alert("Aucune vulnérabilité à exporter. Lancez d'abord un scan.");
@@ -1314,14 +1363,16 @@ async function exportReport(format) {
       downloadBlob(buildCSV(scan), `${baseName}.csv`, "text/csv;charset=utf-8");
     } else if (format === "html") {
       const priorScan = await fetchPriorScanForSummary(scan.url, scan.id);
-      downloadBlob(buildHTMLReport(scan, false, priorScan), `${baseName}.html`, "text/html;charset=utf-8");
+      const trendPoints = await fetchRiskTrend(scan.url);
+      downloadBlob(buildHTMLReport(scan, false, priorScan, trendPoints), `${baseName}.html`, "text/html;charset=utf-8");
     } else if (format === "xml") {
       downloadBlob(buildXML(scan), `${baseName}.xml`, "application/xml");
     } else if (format === "sarif") {
       downloadBlob(buildSARIF(scan), `${baseName}.sarif`, "application/sarif+json");
     } else if (format === "pdf") {
       const priorScan = await fetchPriorScanForSummary(scan.url, scan.id);
-      openPrintTab(buildHTMLReport(scan, true, priorScan));
+      const trendPoints = await fetchRiskTrend(scan.url);
+      openPrintTab(buildHTMLReport(scan, true, priorScan, trendPoints));
     }
     setStatus("ready", `Rapport ${format.toUpperCase()} prêt`);
   } catch (e) {
@@ -1472,7 +1523,7 @@ function buildSARIF(scan) {
   }, null, 2);
 }
 
-function buildHTMLReport(scan, forPrint, priorScan) {
+function buildHTMLReport(scan, forPrint, priorScan, trendPoints) {
   const counts = countBySeverity(scan.vulnerabilities);
   const score = computeRiskScore(counts);
   const risk = riskLevel(score);
@@ -1537,6 +1588,7 @@ function buildHTMLReport(scan, forPrint, priorScan) {
 <html lang="fr"><head><meta charset="UTF-8">
 <title>VulnScan — Rapport</title>
 <style>
+  :root{--accent:#4f46e5;--text-3:#64748b}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,-apple-system,sans-serif;color:#1e293b;padding:30px;background:#fff}
   header{display:flex;align-items:center;gap:14px;border-bottom:3px solid #4f46e5;padding-bottom:14px;margin-bottom:20px}
@@ -1581,6 +1633,7 @@ function buildHTMLReport(scan, forPrint, priorScan) {
       <strong>Scan ID :</strong> ${scan.id.slice(0, 8)}
     </div>
   </div>
+  <div style="margin-left:auto">${buildSparklineSvg(trendPoints)}</div>
 </header>
 
 <h2>Résumé exécutif</h2>

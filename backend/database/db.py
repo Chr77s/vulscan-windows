@@ -184,6 +184,15 @@ def set_triage(finding_id: str, status: str, note: Optional[str] = None) -> bool
         return c.rowcount > 0
 
 
+def risk_trend(url: str, limit: int = 10) -> List[Dict[str, Any]]:
+    with _lock, _connect() as conn:
+        rows = conn.execute("""
+            SELECT started_at, score FROM scans
+            WHERE url = ? ORDER BY started_at DESC LIMIT ?
+        """, (url, limit)).fetchall()
+        return [{"started_at": r["started_at"], "score": r["score"]} for r in reversed(rows)]
+
+
 def diff_scans(scan_a_id: str, scan_b_id: str) -> Dict[str, Any]:
     """
     Compare 2 scans et retourne :
