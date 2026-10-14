@@ -57,6 +57,19 @@ export const TAXONOMY = {
     ],
   },
 
+  "nosqli": {
+    title: "NoSQL Injection",
+    owasp: { id: "A03:2021", name: "Injection",
+             url: "https://owasp.org/Top10/A03_2021-Injection/" },
+    cwe:   { id: "CWE-943", name: "Improper Neutralization of Special Elements in Data Query Logic",
+             url: "https://cwe.mitre.org/data/definitions/943.html" },
+    cvssBase: 9.1,
+    impact: "Contournement d'authentification ou fuite de données via opérateurs de requête (ex: MongoDB $gt/$ne).",
+    references: [
+      { label: "OWASP Testing for NoSQL Injection", url: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection" },
+    ],
+  },
+
   "csrf": {
     title: "Cross-Site Request Forgery",
     owasp: { id: "A01:2021", name: "Broken Access Control",
