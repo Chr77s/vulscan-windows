@@ -1388,6 +1388,12 @@ function buildXML(scan) {
     if (v.impact) xml += `      <impact>${esc(v.impact)}</impact>\n`;
     xml += `      <recommendation>${esc(v.recommendation)}</recommendation>\n`;
     if (v.evidence) xml += `      <evidence><![CDATA[${v.evidence.slice(0, 1000)}]]></evidence>\n`;
+    if (v.evidenceRequest) {
+      xml += `      <evidence-request><![CDATA[${JSON.stringify(v.evidenceRequest)}]]></evidence-request>\n`;
+    }
+    if (v.evidenceResponse) {
+      xml += `      <evidence-response><![CDATA[${JSON.stringify(v.evidenceResponse)}]]></evidence-response>\n`;
+    }
     if (v.detectionMethod) xml += `      <detection-method>${esc(v.detectionMethod)}</detection-method>\n`;
     if (v.references && v.references.length) {
       xml += `      <references>\n`;
@@ -1425,7 +1431,11 @@ function buildHTMLReport(scan, forPrint) {
         <td>${escapeHtml(v.description || "")}</td>
         <td>${escapeHtml(v.impact || "—")}</td>
         <td>${escapeHtml(v.recommendation || "")}</td>
-        <td><pre>${escapeHtml((v.evidence || "").slice(0, 300))}</pre></td>
+        <td><pre>${escapeHtml((v.evidence || "").slice(0, 300))}</pre>${
+          v.evidenceRequest || v.evidenceResponse
+            ? `<details><summary style="cursor:pointer;color:#4f46e5;font-size:10px;margin-top:4px">Requête / Réponse capturée</summary><pre style="margin-top:4px">${escapeHtml(JSON.stringify({ request: v.evidenceRequest, response: v.evidenceResponse }, null, 2).slice(0, 2000))}</pre></details>`
+            : ""
+        }</td>
       </tr>`).join("");
 
   const autoPrint = forPrint ? `<script>window.addEventListener("load", () => setTimeout(() => window.print(), 300));<\/script>` : "";
