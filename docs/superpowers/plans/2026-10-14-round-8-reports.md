@@ -526,7 +526,7 @@ Hand-trace (Review Focus #4): call `buildSparklineSvg([])` and `buildSparklineSv
 - [ ] **Step 9: Commit**
 
 ```bash
-git add backend/database/db.py backend/routes/history.py backend/tests/test_risk_trend.py extension/src/devtools/panel.js extension/src/devtools/panel.html
+git add backend/database/db.py backend/routes/history.py backend/tests/test_risk_trend.py extension/src/devtools/panel.js
 git commit -m "feat: risk-trend sparkline per URL (Historique tab + HTML export header)
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
