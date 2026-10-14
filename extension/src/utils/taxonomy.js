@@ -44,6 +44,19 @@ export const TAXONOMY = {
     ],
   },
 
+  "ssti": {
+    title: "Server-Side Template Injection",
+    owasp: { id: "A03:2021", name: "Injection",
+             url: "https://owasp.org/Top10/A03_2021-Injection/" },
+    cwe:   { id: "CWE-1336", name: "Improper Neutralization of Special Elements Used in a Template Engine",
+             url: "https://cwe.mitre.org/data/definitions/1336.html" },
+    cvssBase: 9.8,
+    impact: "Exécution de code arbitraire côté serveur dans la plupart des cas — équivalent fonctionnel d'un RCE.",
+    references: [
+      { label: "PortSwigger SSTI", url: "https://portswigger.net/web-security/server-side-template-injection" },
+    ],
+  },
+
   "csrf": {
     title: "Cross-Site Request Forgery",
     owasp: { id: "A01:2021", name: "Broken Access Control",
