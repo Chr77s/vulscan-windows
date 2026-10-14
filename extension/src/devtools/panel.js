@@ -191,6 +191,10 @@ function setupRuntimeListeners() {
       // Note : seule la barre de progression se masque après 1.5s — la console
       // d'activité (#moduleLogWrap) est un conteneur séparé, non affecté.
       setTimeout(() => hideProgress(), 1500);
+      // Invalide le cache de tendance (M4) seulement pour cette URL, pas tout
+      // le cache -- le nouveau scan vient de changer sa tendance, pas celle
+      // des autres cibles déjà en cache.
+      if (message.payload?.url) trendCache.delete(message.payload.url);
       loadHistory();
     }
     if (message.type === "SCAN_PROGRESS") {
@@ -711,6 +715,22 @@ function toggleDesc(id) {
 // =====================================================
 // Historique
 // =====================================================
+// Round 8 follow-up (M4) : cache les tendances par URL entre les rendus --
+// renderHistory() se déclenche à chaque case de comparaison cochée/décochée,
+// chaque passage sur l'onglet Historique et chaque scan terminé ; sans cache,
+// chaque rendu refaisait un fetch /history/trend par URL distincte, et les
+// sparklines clignotaient (vides puis remplis) à chaque clic. Invalidé
+// uniquement pour l'URL qui vient d'avoir un nouveau scan (SCAN_COMPLETED),
+// pas pour tout le cache.
+const trendCache = new Map();
+
+async function getCachedRiskTrend(url) {
+  if (trendCache.has(url)) return trendCache.get(url);
+  const points = await fetchRiskTrend(url);
+  trendCache.set(url, points);
+  return points;
+}
+
 function renderHistory() {
   const el = document.getElementById("historyList");
   if (!el) return;
@@ -751,7 +771,7 @@ function renderHistory() {
   // Tendance de risque : une requête backend par URL distincte, pas par ligne
   const distinctUrls = Array.from(new Set(scanHistory.map(s => s.url).filter(Boolean)));
   distinctUrls.forEach(async (url) => {
-    const points = await fetchRiskTrend(url);
+    const points = await getCachedRiskTrend(url);
     const svg = buildSparklineSvg(points);
     el.querySelectorAll(".sparkline-slot").forEach(slot => {
       if (slot.dataset.url === url) slot.innerHTML = svg;
