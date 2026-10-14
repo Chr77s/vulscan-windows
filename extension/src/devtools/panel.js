@@ -326,6 +326,10 @@ async function onStartScan() {
     const tabId = chrome.devtools.inspectedWindow.tabId;
     const tab   = await chrome.tabs.get(tabId);
     allVulns = [];
+    // Final fix wave (Fix 2) : le scan précédemment affiché n'est plus celui à
+    // l'écran — sans ce reset, un export en cours de scan retrouverait l'ancien
+    // scan dans scanHistory et en reprendrait l'URL. SCAN_COMPLETED le repositionne.
+    lastScanId = null;
     currentDiscovery = null;
     expandedIds.clear();
     descExpandedIds.clear();
@@ -1287,15 +1291,28 @@ async function onModuleCheckboxChange() {
 // alimenter le résumé exécutif data-driven du rapport HTML/PDF. Appelée depuis
 // exportReport avant buildHTMLReport — reste un fetch isolé et nommé car le
 // Task 6 y fera référence par son nom pour ajouter son propre pré-fetch.
-async function fetchPriorScanForSummary(url, excludeId) {
+// Final fix wave (Fix 2) : le filtre `url` de /history/list est un LIKE '%url%'
+// (sous-chaîne) — on ne s'y fie que comme pré-filtre et on garde côté client
+// uniquement l'URL exactement égale ET strictement antérieure au scan exporté
+// (sinon un scan de http://site.com/login, ou un scan plus récent quand on
+// exporte un ancien scan rouvert depuis l'Historique, pouvait servir de
+// « précédent »). limit=100 : la liste backend est triée du plus récent au plus
+// ancien, la borne doit donc dépasser tous les scans plus récents de même
+// sous-chaîne pour atteindre le précédent d'un ancien scan rouvert (l'Historique
+// en garde 50 par défaut) — même borne que fetchHistoryFromBackend.
+async function fetchPriorScanForSummary(url, excludeId, currentStartedAt) {
   try {
     const cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
     if (!cfg || cfg.error) return null;
-    const r = await fetch(`${cfg.backendUrl}/history/list?url=${encodeURIComponent(url)}&limit=2`, { signal: AbortSignal.timeout(5000) });
+    const r = await fetch(`${cfg.backendUrl}/history/list?url=${encodeURIComponent(url)}&limit=100`, { signal: AbortSignal.timeout(5000) });
     if (!r.ok) return null;
     const data = await r.json();
-    const prior = (data.scans || []).find(s => s.id !== excludeId);
-    return prior || null;
+    const matches = (data.scans || []).filter(s =>
+      s.url === url && s.id !== excludeId && (s.started_at ?? s.startedAt) < currentStartedAt
+    );
+    // scans are already ordered started_at DESC from the backend, so the first
+    // exact match after filtering is the most recent one strictly before this scan
+    return matches[0] || null;
   } catch (e) {
     return null;
   }
@@ -1346,13 +1363,22 @@ async function exportReport(format) {
   // format, donc identique pour JSON/CSV/HTML/XML/PDF (et SARIF plus tard).
   const includeFP = document.getElementById("chkIncludeFP")?.checked ?? false;
   const vulnsToExport = includeFP ? allVulns : allVulns.filter(v => v.triageStatus !== "false_positive");
+  // Final fix wave (Fix 2) : l'URL (et l'horodatage de référence du résumé) viennent
+  // du scan réellement ouvert, pas de #urlDisplay (onglet inspecté à l'ouverture du
+  // panel) — un ancien scan rouvert depuis l'Historique peut viser une autre URL.
+  // Repli sur #urlDisplay seulement si le scan n'est pas (encore) dans scanHistory.
+  const openScan = scanHistory.find(s => s.id === lastScanId);
   const scan = {
     id: lastScanId || crypto.randomUUID(),
-    url: document.getElementById("urlDisplay").textContent || "",
+    url: (openScan?.url) || document.getElementById("urlDisplay").textContent || "",
     startedAt: allVulns[0]?.detectedAt || Date.now(),
     finishedAt: Date.now(),
     vulnerabilities: vulnsToExport,
   };
+  // started_at côté backend = currentScan.startedAt du service worker : on compare
+  // donc à la même valeur (même source d'horloge) quand le scan est connu, et à
+  // scan.startedAt (detectedAt de la 1re vuln, >= début du scan) sinon.
+  const currentStartedAt = openScan?.startedAt ?? scan.startedAt;
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
   const baseName = `vulnscan-${stamp}`;
 
@@ -1362,7 +1388,7 @@ async function exportReport(format) {
     } else if (format === "csv") {
       downloadBlob(buildCSV(scan), `${baseName}.csv`, "text/csv;charset=utf-8");
     } else if (format === "html") {
-      const priorScan = await fetchPriorScanForSummary(scan.url, scan.id);
+      const priorScan = await fetchPriorScanForSummary(scan.url, scan.id, currentStartedAt);
       const trendPoints = await fetchRiskTrend(scan.url);
       downloadBlob(buildHTMLReport(scan, false, priorScan, trendPoints), `${baseName}.html`, "text/html;charset=utf-8");
     } else if (format === "xml") {
@@ -1370,7 +1396,7 @@ async function exportReport(format) {
     } else if (format === "sarif") {
       downloadBlob(buildSARIF(scan), `${baseName}.sarif`, "application/sarif+json");
     } else if (format === "pdf") {
-      const priorScan = await fetchPriorScanForSummary(scan.url, scan.id);
+      const priorScan = await fetchPriorScanForSummary(scan.url, scan.id, currentStartedAt);
       const trendPoints = await fetchRiskTrend(scan.url);
       openPrintTab(buildHTMLReport(scan, true, priorScan, trendPoints));
     }
