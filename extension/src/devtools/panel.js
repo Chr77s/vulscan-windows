@@ -1620,7 +1620,7 @@ function buildHTMLReport(scan, forPrint, priorScan, trendPoints) {
   a{color:#4f46e5}
   .summary{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:16px 0;font-size:13px;line-height:1.6}
   footer{margin-top:30px;padding-top:14px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:11px;text-align:center}
-  @media print {body{padding:15px}.no-print{display:none}table{font-size:9.5px}pre{max-height:none}}
+  @media print {body{padding:15px}.no-print{display:none}table{font-size:9.5px}pre{max-height:none}tr{page-break-inside:avoid}}
 </style>
 </head><body>
 <header>
