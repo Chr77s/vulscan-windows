@@ -356,6 +356,10 @@ function onClearResults() {
   currentDiscovery = null;
   expandedIds.clear();
   descExpandedIds.clear();
+  // Vide aussi la console d'activité : elle persiste après la fin d'un scan,
+  // elle ne doit pas survivre à "Effacer" à côté de résultats désormais vides.
+  moduleLogLines = [];
+  renderModuleLog();
   renderAll();
   setStatus("ready", "Prêt");
   document.getElementById("scanMeta").textContent = "—";
