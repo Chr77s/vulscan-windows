@@ -55,6 +55,25 @@ def test_finding_to_dict_shape():
     assert d["owasp"]["id"] == "A03:2021"
 
 
+def test_finding_to_dict_includes_evidence_request_response_when_set():
+    from scanner.core.module_base import Finding
+    f = Finding(
+        type="sqli", severity="critical", description="t", recommendation="t", url="http://a",
+        evidence_request={"method": "GET", "url": "http://a", "headers": {}, "body": None},
+        evidence_response={"status": 200, "headers": {}, "body_snippet": "ok", "elapsed_ms": 12.3},
+    )
+    d = f.to_dict()
+    assert d["evidenceRequest"]["method"] == "GET"
+    assert d["evidenceResponse"]["status"] == 200
+
+def test_finding_to_dict_evidence_defaults_to_none():
+    from scanner.core.module_base import Finding
+    f = Finding(type="xss", severity="high", description="t", recommendation="t", url="http://a")
+    d = f.to_dict()
+    assert d["evidenceRequest"] is None
+    assert d["evidenceResponse"] is None
+
+
 def test_lfi_signatures():
     """La regex root:x:0:0 doit matcher un /etc/passwd typique."""
     from scanner.modules.lfi import LfiModule

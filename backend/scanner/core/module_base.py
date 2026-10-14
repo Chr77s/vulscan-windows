@@ -23,6 +23,8 @@ class Finding:
     parameter: str = ""
     payload: Optional[str] = None
     evidence: str = ""
+    evidence_request: Optional[Dict[str, Any]] = None
+    evidence_response: Optional[Dict[str, Any]] = None
     confidence: int = 80       # 0-100 (probabilité subjective)
     detection_method: str = "passive-server-analysis"
     source: str = "backend-module"
@@ -47,6 +49,8 @@ class Finding:
         if d.get("owasp_id"):
             d["owasp"] = {"id": d["owasp_id"], "name": "", "url": "https://owasp.org/Top10/"}
         d.pop("owasp_id", None)
+        d["evidenceRequest"] = d.pop("evidence_request")
+        d["evidenceResponse"] = d.pop("evidence_response")
         return d
 
 
