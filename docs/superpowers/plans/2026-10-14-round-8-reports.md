@@ -500,8 +500,8 @@ function buildSparklineSvg(points) {
 
 async function fetchRiskTrend(url) {
   try {
-    const { config } = await chrome.storage.local.get("config");
-    const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
+    const cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+    if (!cfg || cfg.error) return [];
     const r = await fetch(`${cfg.backendUrl}/history/trend?url=${encodeURIComponent(url)}&limit=10`, { signal: AbortSignal.timeout(5000) });
     if (!r.ok) return [];
     const data = await r.json();
@@ -511,6 +511,7 @@ async function fetchRiskTrend(url) {
   }
 }
 ```
+(**Correction, caught during Task 4's review:** `panel.js` has no `DEFAULT_CONFIG` symbol at all — it's a plain `<script>`, not a module, and every config read in this file goes through `chrome.runtime.sendMessage({type:"GET_CONFIG"})` instead, same pattern `fetchPriorScanForSummary` (Task 4) already uses. The code above reflects that correction; do not use `DEFAULT_CONFIG`/`chrome.storage.local.get("config")` directly in `panel.js`.)
 In `renderHistory()`, after building `el.innerHTML` from the mapped rows (the existing `.join("")` call), fetch the trend ONCE per distinct `url` among the currently-rendered `scanHistory` entries (deduplicate via a `Map`/`Set` first — do not issue one backend call per row when several rows share the same URL) and inject each result into a new placeholder element per row (e.g. give each `.history-row` a `<span class="sparkline-slot" data-url="${escapeHtml(s.url)}"></span>` in the template, then after render, loop the distinct URLs, `fetchRiskTrend`, and set `.innerHTML` on every slot matching that URL).
 
 - [ ] **Step 7: Wire it into the HTML export header**
