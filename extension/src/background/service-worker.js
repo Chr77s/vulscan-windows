@@ -514,82 +514,20 @@ function stopScan() {
   return finalizeScan();
 }
 
-// Bornes appliquées UNIQUEMENT à la copie écrite dans chrome.storage.local.scanHistory
-// (quota ~10 Mo, pas d'unlimitedStorage) — l'objet `scan` original, non tronqué, part
-// tel quel vers le backend SQLite (pushScanToBackend) et reste en mémoire (currentScan/
-// allVulns côté panel) pour l'affichage de la session en cours.
-const HISTORY_EVIDENCE_BODY_CAP = 2048;   // body / body_snippet par finding
-const HISTORY_FORM_VALUE_CAP = 256;       // discovery.forms[].fields[].value (ex. __VIEWSTATE)
-
-function truncateForHistory(value, cap) {
-  const str = typeof value === "string" ? value : JSON.stringify(value);
-  if (str === undefined || str.length <= cap) return value;
-  return str.slice(0, cap) + `…[tronqué pour l'historique, ${str.length} caractères au total]`;
-}
-
-// Construit une copie de `scan` dont les champs volumineux et jamais affichés tels quels
-// (body/body_snippet d'evidence, valeurs de champs de formulaire crawlés) sont bornés,
-// pour éviter de saturer le quota de chrome.storage.local sur 50 scans glissants.
-function sanitizeScanForHistory(scan) {
-  const sanitized = { ...scan };
-
-  if (Array.isArray(sanitized.vulnerabilities)) {
-    sanitized.vulnerabilities = sanitized.vulnerabilities.map(v => {
-      if (!v.evidenceRequest && !v.evidenceResponse) return v;
-      const out = { ...v };
-      if (out.evidenceRequest && out.evidenceRequest.body != null) {
-        out.evidenceRequest = {
-          ...out.evidenceRequest,
-          body: truncateForHistory(out.evidenceRequest.body, HISTORY_EVIDENCE_BODY_CAP),
-        };
-      }
-      if (out.evidenceResponse && typeof out.evidenceResponse.body_snippet === "string") {
-        out.evidenceResponse = {
-          ...out.evidenceResponse,
-          body_snippet: truncateForHistory(out.evidenceResponse.body_snippet, HISTORY_EVIDENCE_BODY_CAP),
-        };
-      }
-      return out;
-    });
-  }
-
-  if (sanitized.discovery && Array.isArray(sanitized.discovery.forms)) {
-    sanitized.discovery = {
-      ...sanitized.discovery,
-      forms: sanitized.discovery.forms.map(f => ({
-        ...f,
-        fields: Array.isArray(f.fields)
-          ? f.fields.map(fd =>
-              typeof fd.value === "string" && fd.value.length > HISTORY_FORM_VALUE_CAP
-                ? { ...fd, value: truncateForHistory(fd.value, HISTORY_FORM_VALUE_CAP) }
-                : fd
-            )
-          : f.fields,
-      })),
-    };
-  }
-
-  return sanitized;
-}
-
 async function saveScanToHistory(scan) {
   try {
     const { config, scanHistory } = await chrome.storage.local.get(["config", "scanHistory"]);
     const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
     const history = scanHistory || [];
-    history.unshift(sanitizeScanForHistory(scan));
+    history.unshift(scan);
     const trimmed = history.slice(0, cfg.maxHistoryItems);
     await chrome.storage.local.set({ scanHistory: trimmed });
-  } catch (err) {
-    console.error("[VulnScan] Erreur sauvegarde locale :", err);
-  }
 
-  // Push vers SQLite backend — best-effort et indépendant de la sauvegarde locale
-  // ci-dessus : un échec de quota local ne doit jamais empêcher ce push (et inversement),
-  // sans quoi les findings de ce scan ne pourraient plus jamais être triés (SET_TRIAGE
-  // PATCH-erait un finding_id que SQLite n'a jamais vu). On pousse `scan` non tronqué :
-  // le backend n'a pas la contrainte de quota de chrome.storage.local.
-  pushScanToBackend(scan).catch(e => console.warn("[VulnScan] Backend history KO:", e.message));
+    // Push asynchrone vers SQLite backend — best-effort
+    pushScanToBackend(scan).catch(e => console.warn("[VulnScan] Backend history KO:", e.message));
+  } catch (err) {
+    console.error("[VulnScan] Erreur sauvegarde :", err);
+  }
 }
 
 async function fetchHistoryFromBackend() {
