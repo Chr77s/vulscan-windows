@@ -92,7 +92,7 @@ def run_scan():
                 ],
                 "endpoints":     (context.get("crawled") or {}).get("api_endpoints", [])[:10],
             },
-            "moduleLog": [_module_log_entry(e) for e in engine.last_module_log],
+            "moduleLog": [_module_log_entry(e) for e in context.get("module_log", [])],
         })
     except Exception as e:
         logger.exception("Scan engine error")

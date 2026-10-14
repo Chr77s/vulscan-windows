@@ -100,6 +100,36 @@ def test_engine_run_records_crash_distinctly_in_module_log():
     assert "boom" in entry["error"]
 
 
+def test_engine_run_writes_module_log_to_context_not_only_self():
+    """Concurrency fix (Round 7 I4 follow-up) : sous Flask threaded=True, le
+    moteur est un singleton partagé entre requêtes. last_module_log porté
+    uniquement par self peut être écrasé par une requête concurrente avant
+    que l'appelant d'une autre requête ne le lise. Le journal doit donc aussi
+    être accessible via `context`, qui est toujours une nouvelle instance par
+    requête HTTP — ce test prouve que deux appels sur le MÊME moteur partagé,
+    avec deux `context` différents, ne mélangent pas leurs journaux."""
+    engine = ScannerEngine()
+    engine.register(_FakeModule)
+
+    class _OtherModule(ScannerModule):
+        name = "other-test"
+        category = "test"
+        default_enabled = True
+
+        def scan(self, target, context):
+            return []
+
+    engine.register(_OtherModule)
+
+    context_a: dict = {}
+    context_b: dict = {}
+    engine.run("http://a.test", context=context_a, enabled=["fake-test"], crawl=False)
+    engine.run("http://b.test", context=context_b, enabled=["other-test"], crawl=False)
+
+    assert [e["module"] for e in context_a["module_log"]] == ["fake-test"]
+    assert [e["module"] for e in context_b["module_log"]] == ["other-test"]
+
+
 def test_engine_auto_discovery():
     """Vérifie qu'on découvre bien les modules du package scanner.modules."""
     engine = ScannerEngine()

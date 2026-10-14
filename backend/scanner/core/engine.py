@@ -66,7 +66,14 @@ class ScannerEngine:
         enabled: Optional[List[str]] = None,
         crawl: bool = True,
     ) -> List[Finding]:
-        context = context or {}
+        # `context or {}` serait un piège ici : si l'appelant passe un dict
+        # vide (valide, pas "pas de contexte"), `{} or {}` vaut le second `{}`
+        # (le premier est falsy) et remplace la référence de l'appelant par un
+        # nouveau dict — toute écriture faite ici (crawled, module_log, etc.)
+        # deviendrait invisible pour l'appelant. Seul `None` doit déclencher
+        # un nouveau dict ; un dict vide explicite doit garder son identité.
+        if context is None:
+            context = {}
         findings: List[Finding] = []
 
         # =========================================================
@@ -129,6 +136,16 @@ class ScannerEngine:
         except Exception as e:
             logger.warning(f"Inférence ignorée : {e}")
 
+        # Concurrency fix (Round 7 I4 follow-up) : `context` est toujours une
+        # nouvelle instance par requête HTTP (routes/scanner_engine.py crée
+        # `context = data.get("context", {})` à chaque appel), contrairement à
+        # `self` qui est le moteur singleton partagé par toutes les requêtes
+        # sous Flask threaded=True — deux /scanner/run concurrents pouvaient
+        # donc se lire le journal l'un de l'autre via self.last_module_log.
+        # On écrit désormais le journal dans context en plus de self ; self
+        # reste pour l'usage direct/mono-thread (scripts, tests existants),
+        # non concurrent par nature.
+        context["module_log"] = module_log
         self.last_module_log = module_log
         return merged
 
