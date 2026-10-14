@@ -54,6 +54,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("urlDisplay").textContent = "URL inconnue";
   }
 
+  await initTheme();
   await loadHistory();
   if (scanHistory.length > 0) {
     lastScanId = scanHistory[0].id;
@@ -76,12 +77,50 @@ async function loadHistory() {
 }
 
 // =====================================================
+// Thème clair/sombre (Round 7, Task 8)
+// =====================================================
+async function initTheme() {
+  let cfg;
+  try {
+    cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+  } catch {
+    cfg = null;
+  }
+  applyTheme(cfg?.theme === "light" ? "light" : "dark");
+}
+
+// data-theme="light" active le bloc d'overrides CSS ; "dark" = pas d'attribut
+// du tout, puisque les valeurs par défaut de :root sont déjà le thème sombre.
+function applyTheme(theme) {
+  if (theme === "light") {
+    document.documentElement.dataset.theme = "light";
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+  const btn = document.getElementById("btnThemeToggle");
+  if (btn) btn.textContent = theme === "light" ? "🌙" : "☀️";
+}
+
+async function onToggleTheme() {
+  const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  applyTheme(next);
+  try {
+    const cfg = await chrome.runtime.sendMessage({ type: "GET_CONFIG" });
+    await chrome.runtime.sendMessage({ type: "SET_CONFIG", payload: { ...cfg, theme: next } });
+  } catch (e) {
+    console.warn("[VulnScan] SET_CONFIG (theme) KO :", e.message);
+  }
+}
+
+// =====================================================
 // Event listeners
 // =====================================================
 function setupEventListeners() {
   document.getElementById("btnScan").addEventListener("click", onStartScan);
   document.getElementById("btnStop").addEventListener("click", onStopScan);
   document.getElementById("btnClear").addEventListener("click", onClearResults);
+  const btnTheme = document.getElementById("btnThemeToggle");
+  if (btnTheme) btnTheme.addEventListener("click", onToggleTheme);
 
   document.getElementById("btnExportJson").addEventListener("click", () => exportReport("json"));
   document.getElementById("btnExportHtml").addEventListener("click", () => exportReport("html"));
