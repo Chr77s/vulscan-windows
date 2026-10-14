@@ -54,6 +54,22 @@ function cdataSafe(s) {
   return String(s ?? "").replace(/]]>/g, "]]]]><![CDATA[>");
 }
 
+// Round 7 follow-up (I1) : échappe ET valide le schéma avant de rendre un lien
+// cliquable -- cwe.url/owasp.url viennent aujourd'hui uniquement de données
+// fiables (taxonomy.js statique, ou cwe_id/owasp_id fixes par module), donc
+// non exploitable actuellement, mais latent si un futur module dérive un jour
+// ces champs depuis le contenu de la cible scannée. new URL() accepte déjà
+// "javascript:alert(1)" comme URL valide (protocol: "javascript:") -- c'est
+// justement ce que ce contrôle de schéma rejette.
+function safeHref(url) {
+  try {
+    const u = new URL(url);
+    return (u.protocol === "http:" || u.protocol === "https:") ? u.href : "#";
+  } catch {
+    return "#";
+  }
+}
+
 function sarifLevelFor(severity) {
   return severity === "critical" || severity === "high" ? "error"
        : severity === "medium" ? "warning"
@@ -325,8 +341,8 @@ function buildHTMLReport(scan, forPrint, priorScan, trendPoints) {
         <td><span class="badge badge-${v.severity}">${SEVERITY_LABEL[v.severity] || v.severity}</span></td>
         <td><strong>${escapeHtml(v.title || TYPE_LABEL[v.type] || v.type)}</strong></td>
         <td>${v.cvssBase != null ? Number(v.cvssBase).toFixed(1) : "—"}</td>
-        <td>${v.cwe ? `<a href="${v.cwe.url}">${v.cwe.id}</a>` : "—"}</td>
-        <td>${v.owasp ? `<a href="${v.owasp.url}">${v.owasp.id}</a>` : "—"}</td>
+        <td>${v.cwe ? `<a href="${escapeHtml(safeHref(v.cwe.url))}">${escapeHtml(v.cwe.id)}</a>` : "—"}</td>
+        <td>${v.owasp ? `<a href="${escapeHtml(safeHref(v.owasp.url))}">${escapeHtml(v.owasp.id)}</a>` : "—"}</td>
         <td>${v.confidence != null ? v.confidence + "%" : "—"}</td>
         <td><code>${escapeHtml(v.url || "")}</code></td>
         <td>${escapeHtml(v.parameter || "—")}</td>

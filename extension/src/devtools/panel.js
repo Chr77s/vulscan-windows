@@ -670,17 +670,17 @@ function buildCardHtml(v) {
             ${v.owasp ? `
               <div class="ref-item">
                 <div class="ref-key">OWASP Top 10</div>
-                <div class="ref-val"><a href="${v.owasp.url}" target="_blank">${v.owasp.id} — ${escapeHtml(v.owasp.name)}</a></div>
+                <div class="ref-val"><a href="${escapeHtml(safeHref(v.owasp.url))}" target="_blank">${escapeHtml(v.owasp.id)} — ${escapeHtml(v.owasp.name)}</a></div>
               </div>` : ""}
             ${v.cwe ? `
               <div class="ref-item">
                 <div class="ref-key">CWE</div>
-                <div class="ref-val"><a href="${v.cwe.url}" target="_blank">${v.cwe.id} — ${escapeHtml(v.cwe.name)}</a></div>
+                <div class="ref-val"><a href="${escapeHtml(safeHref(v.cwe.url))}" target="_blank">${escapeHtml(v.cwe.id)} — ${escapeHtml(v.cwe.name)}</a></div>
               </div>` : ""}
             ${(v.references || []).map(r => `
               <div class="ref-item">
                 <div class="ref-key">Lien externe</div>
-                <div class="ref-val"><a href="${r.url}" target="_blank">${escapeHtml(r.label)}</a></div>
+                <div class="ref-val"><a href="${escapeHtml(safeHref(r.url))}" target="_blank">${escapeHtml(r.label)}</a></div>
               </div>`).join("")}
           </div>
         </div>
