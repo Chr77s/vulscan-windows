@@ -594,11 +594,11 @@ function buildCardHtml(v) {
   const date = v.detectedAt ? new Date(v.detectedAt).toLocaleTimeString("fr-FR") : "—";
 
   const cvss = v.cvssBase ?? null;
-  const cvssColor = cvss == null ? "#64748b"
-    : cvss >= 9 ? "#ef4444"
-    : cvss >= 7 ? "#f97316"
-    : cvss >= 4 ? "#eab308"
-    : "#22c55e";
+  const cvssColor = cvss == null ? "var(--text-3)"
+    : cvss >= 9 ? "var(--sev-text-critical)"
+    : cvss >= 7 ? "var(--sev-text-high)"
+    : cvss >= 4 ? "var(--sev-text-medium)"
+    : "var(--sev-text-low)";
 
   return `
     <div class="vuln-card sev-${v.severity} ${isOpen ? "expanded" : ""} ${v.triageStatus === "false_positive" ? "triaged-fp" : ""}" data-id="${v.id}">
@@ -742,11 +742,11 @@ function renderHistory() {
           <div class="history-meta">${date} · ${s.id.slice(0, 8)} · ${(s.vulnerabilities || []).length} vulns</div>
         </div>
         <div>
-          <div class="history-stat" style="color:#ef4444">${counts.critical}</div>
+          <div class="history-stat" style="color:var(--sev-text-critical)">${counts.critical}</div>
           <div class="history-stat-label">Critical</div>
         </div>
         <div>
-          <div class="history-stat" style="color:#f97316">${counts.high}</div>
+          <div class="history-stat" style="color:var(--sev-text-high)">${counts.high}</div>
           <div class="history-stat-label">High</div>
         </div>
         <div>
@@ -853,13 +853,16 @@ function renderDiff(scanA, scanB, diff) {
 
   const card = (f, action) => {
     const sev = f.severity || "info";
-    const color = action === "added"   ? "#ef4444"
-                : action === "removed" ? "#22c55e"
-                : "#eab308";
+    const accentColor = action === "added"   ? "var(--critical)"
+                       : action === "removed" ? "var(--low)"
+                       : "var(--medium)";
+    const textColor = action === "added"   ? "var(--sev-text-critical)"
+                     : action === "removed" ? "var(--sev-text-low)"
+                     : "var(--sev-text-medium)";
     return `
-      <div class="vuln-card sev-${sev}" style="margin-bottom:8px;border-left-color:${color}">
+      <div class="vuln-card sev-${sev}" style="margin-bottom:8px;border-left-color:${accentColor}">
         <div class="card-head" style="cursor:default">
-          <span style="font-size:14px;font-weight:700;color:${color};margin-right:8px;">
+          <span style="font-size:14px;font-weight:700;color:${textColor};margin-right:8px;">
             ${action === "added" ? "+" : action === "removed" ? "−" : "Δ"}
           </span>
           <div class="card-head-main">
@@ -878,9 +881,9 @@ function renderDiff(scanA, scanB, diff) {
   const changedCard = (c) => {
     const sev = c.after.severity;
     return `
-      <div class="vuln-card sev-${sev}" style="margin-bottom:8px;border-left-color:#eab308">
+      <div class="vuln-card sev-${sev}" style="margin-bottom:8px;border-left-color:var(--medium)">
         <div class="card-head" style="cursor:default">
-          <span style="font-size:14px;font-weight:700;color:#eab308;margin-right:8px">Δ</span>
+          <span style="font-size:14px;font-weight:700;color:var(--sev-text-medium);margin-right:8px">Δ</span>
           <div class="card-head-main">
             <div class="card-head-title">
               <strong>${escapeHtml(c.after.title || TYPE_LABEL[c.after.type] || c.after.type)}</strong>
@@ -913,15 +916,15 @@ function renderDiff(scanA, scanB, diff) {
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
       <div style="background:rgba(239,68,68,0.12);padding:12px;border-radius:8px;border-left:3px solid #ef4444">
-        <div style="font-size:24px;font-weight:800;color:#ef4444">+${diff.added.length}</div>
+        <div style="font-size:24px;font-weight:800;color:var(--sev-text-critical)">+${diff.added.length}</div>
         <div style="font-size:11px;color:var(--text-3);text-transform:uppercase;font-weight:700">Nouveaux</div>
       </div>
       <div style="background:rgba(34,197,94,0.12);padding:12px;border-radius:8px;border-left:3px solid #22c55e">
-        <div style="font-size:24px;font-weight:800;color:#22c55e">−${diff.removed.length}</div>
+        <div style="font-size:24px;font-weight:800;color:var(--sev-text-low)">−${diff.removed.length}</div>
         <div style="font-size:11px;color:var(--text-3);text-transform:uppercase;font-weight:700">Corrigés</div>
       </div>
       <div style="background:rgba(234,179,8,0.12);padding:12px;border-radius:8px;border-left:3px solid #eab308">
-        <div style="font-size:24px;font-weight:800;color:#eab308">${diff.changed.length}</div>
+        <div style="font-size:24px;font-weight:800;color:var(--sev-text-medium)">${diff.changed.length}</div>
         <div style="font-size:11px;color:var(--text-3);text-transform:uppercase;font-weight:700">Modifiés</div>
       </div>
       <div style="background:var(--bg-2);padding:12px;border-radius:8px;border-left:3px solid var(--text-3)">
@@ -930,11 +933,11 @@ function renderDiff(scanA, scanB, diff) {
       </div>
     </div>
 
-    ${diff.added.length > 0 ? `<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;color:#ef4444;margin:18px 0 10px">+ Nouvelles vulnérabilités (régressions)</h3>${diff.added.map(f => card(f, "added")).join("")}` : ""}
+    ${diff.added.length > 0 ? `<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;color:var(--sev-text-critical);margin:18px 0 10px">+ Nouvelles vulnérabilités (régressions)</h3>${diff.added.map(f => card(f, "added")).join("")}` : ""}
 
-    ${diff.removed.length > 0 ? `<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;color:#22c55e;margin:18px 0 10px">− Vulnérabilités corrigées</h3>${diff.removed.map(f => card(f, "removed")).join("")}` : ""}
+    ${diff.removed.length > 0 ? `<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;color:var(--sev-text-low);margin:18px 0 10px">− Vulnérabilités corrigées</h3>${diff.removed.map(f => card(f, "removed")).join("")}` : ""}
 
-    ${diff.changed.length > 0 ? `<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;color:#eab308;margin:18px 0 10px">Δ Vulnérabilités modifiées</h3>${diff.changed.map(changedCard).join("")}` : ""}
+    ${diff.changed.length > 0 ? `<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;color:var(--sev-text-medium);margin:18px 0 10px">Δ Vulnérabilités modifiées</h3>${diff.changed.map(changedCard).join("")}` : ""}
   `;
 }
 

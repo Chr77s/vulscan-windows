@@ -28,6 +28,24 @@
       --medium:      #eab308;
       --low:         #22c55e;
       --info:        #38bdf8;
+      /* Severity hue used as TEXT (not a solid swatch/bar/dot) needs its own,
+         theme-adjusted shade — same hue family, darkened enough to stay
+         legible once the page background goes light. In dark mode these are
+         simply the hue itself (already legible on a near-black background).
+         --critical/--high/--medium/--low/--info themselves NEVER change. */
+      --sev-text-critical: var(--critical);
+      --sev-text-high:     var(--high);
+      --sev-text-medium:   var(--medium);
+      --sev-text-low:      var(--low);
+      --sev-text-info:     var(--info);
+      /* Structural chrome that previously hardcoded a dark color outside the
+         --bg-*/--text-* token system, so it never re-themed with everything
+         else (topbar, the donut/types side panel, the body backdrop
+         gradient, the donut chart's background track). */
+      --body-gradient-start: #14213a;
+      --topbar-bg:           rgba(15, 23, 42, 0.85);
+      --panel-overlay-bg:    rgba(15, 23, 42, 0.5);
+      --donut-track:         #1e293b;
     }
 
     /* ====== Light theme (Round 7, Task 8) ======
@@ -47,12 +65,24 @@
       --text-2:      #475569;
       --text-3:      #64748b;
       --text-4:      #94a3b8;
+      /* Same hue, darker shade — clears WCAG AA against a light background
+         (verified by relative-luminance calc during Round 7's reviews, same
+         values already used for the badge-* rules below). */
+      --sev-text-critical: #b91c1c;
+      --sev-text-high:     #9a3412;
+      --sev-text-medium:   #854d0e;
+      --sev-text-low:      #166534;
+      --sev-text-info:     #075985;
+      --body-gradient-start: #e2e8f0;
+      --topbar-bg:           rgba(255, 255, 255, 0.85);
+      --panel-overlay-bg:    rgba(255, 255, 255, 0.5);
+      --donut-track:         #e2e8f0;
     }
 
     html, body { height: 100%; }
     body {
       font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: radial-gradient(ellipse at top left, #14213a 0%, var(--bg-0) 55%);
+      background: radial-gradient(ellipse at top left, var(--body-gradient-start) 0%, var(--bg-0) 55%);
       color: var(--text-1);
       font-size: 13px;
       display: flex;
@@ -64,7 +94,7 @@
     .topbar {
       display: flex; align-items: center; gap: 14px;
       padding: 12px 18px;
-      background: rgba(15, 23, 42, 0.85);
+      background: var(--topbar-bg);
       backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
@@ -143,11 +173,11 @@
 
     .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
     .kpi-value { font-size: 24px; font-weight: 800; color: var(--text-0); line-height: 1.1; margin-top: 4px; }
-    .kpi.critical .kpi-value { color: var(--critical); }
-    .kpi.high     .kpi-value { color: var(--high); }
-    .kpi.medium   .kpi-value { color: var(--medium); }
-    .kpi.low      .kpi-value { color: var(--low); }
-    .kpi.info     .kpi-value { color: var(--info); }
+    .kpi.critical .kpi-value { color: var(--sev-text-critical); }
+    .kpi.high     .kpi-value { color: var(--sev-text-high); }
+    .kpi.medium   .kpi-value { color: var(--sev-text-medium); }
+    .kpi.low      .kpi-value { color: var(--sev-text-low); }
+    .kpi.info     .kpi-value { color: var(--sev-text-info); }
     .kpi-sub { font-size: 10px; color: var(--text-3); margin-top: 2px; }
 
     /* ====== Toolbar (filter row) ====== */
@@ -202,7 +232,7 @@
 
     /* Sidebar : vulnerability list */
     .sidebar {
-      background: rgba(15, 23, 42, 0.5);
+      background: var(--panel-overlay-bg);
       border-right: 1px solid var(--border);
       overflow-y: auto;
       display: flex; flex-direction: column;
@@ -323,7 +353,7 @@
 
     /* Right column : donut + summary */
     .right {
-      background: rgba(15, 23, 42, 0.5);
+      background: var(--panel-overlay-bg);
       border-left: 1px solid var(--border);
       overflow-y: auto;
       padding: 18px;
@@ -689,7 +719,7 @@
         <div class="donut-wrap">
           <div class="donut-container">
             <svg class="donut-svg" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#1e293b" stroke-width="3.5"></circle>
+              <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="var(--donut-track)" stroke-width="3.5"></circle>
               <circle id="donutCritical" cx="18" cy="18" r="15.9155" fill="transparent" stroke="#ef4444" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 18 18)" stroke-linecap="butt"></circle>
               <circle id="donutHigh"     cx="18" cy="18" r="15.9155" fill="transparent" stroke="#f97316" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 18 18)" stroke-linecap="butt"></circle>
               <circle id="donutMedium"   cx="18" cy="18" r="15.9155" fill="transparent" stroke="#eab308" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 18 18)" stroke-linecap="butt"></circle>
