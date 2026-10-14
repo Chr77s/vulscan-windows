@@ -67,7 +67,8 @@ function setupListeners() {
 }
 
 async function saveConfig() {
-  const cfg = {};
+  const { config: existingConfig } = await chrome.storage.local.get("config");
+  const cfg = { ...DEFAULT_CONFIG, ...(existingConfig || {}) };
   for (const key of CHECKBOX_FIELDS) {
     const el = document.getElementById(key);
     if (el) cfg[key] = !!el.checked;
