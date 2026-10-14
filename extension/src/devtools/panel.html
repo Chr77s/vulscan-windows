@@ -374,6 +374,7 @@
     .vuln-card.sev-medium   { border-left-color: var(--medium); }
     .vuln-card.sev-low      { border-left-color: var(--low); }
     .vuln-card.sev-info     { border-left-color: var(--info); }
+    .vuln-card.triaged-fp   { opacity: 0.5; border-left-color: var(--text-4); }
     .vuln-card.selected { border-color: var(--accent); }
 
     .card-head {
@@ -611,6 +612,7 @@
       <div class="chip med"   data-filter="medium"><span class="dot"></span>Medium <span id="countFMedium" style="opacity:.7">0</span></div>
       <div class="chip low"   data-filter="low"><span class="dot"></span>Low <span id="countFLow" style="opacity:.7">0</span></div>
       <div class="chip info"  data-filter="info"><span class="dot"></span>Info <span id="countFInfo" style="opacity:.7">0</span></div>
+      <div class="chip" data-filter="false_positive">Faux positifs <span id="countFFalsePositive" style="opacity:.7">0</span></div>
     </div>
   </div>
 

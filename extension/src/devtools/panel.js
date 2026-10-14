@@ -299,7 +299,11 @@ function renderAll() {
 
 function getFilteredVulns() {
   return allVulns.filter((v) => {
-    if (currentFilter !== "all" && v.severity !== currentFilter) return false;
+    if (currentFilter === "false_positive") {
+      if (v.triageStatus !== "false_positive") return false;
+    } else if (currentFilter !== "all" && v.severity !== currentFilter) {
+      return false;
+    }
     if (currentSearch) {
       const blob = [v.description, v.type, v.parameter, v.url, v.recommendation,
                     v.cwe?.id, v.owasp?.id, v.title, v.impact]
@@ -365,6 +369,8 @@ function updateFilterCounts() {
   document.getElementById("countFMedium").textContent   = counts.medium;
   document.getElementById("countFLow").textContent      = counts.low;
   document.getElementById("countFInfo").textContent     = counts.info;
+  document.getElementById("countFFalsePositive").textContent =
+    allVulns.filter(v => v.triageStatus === "false_positive").length;
 }
 
 // =====================================================
@@ -477,6 +483,24 @@ function renderCards() {
       } catch {}
     });
   });
+  container.querySelectorAll(".triage-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const status = btn.dataset.status;
+      const result = await chrome.runtime.sendMessage({
+        type: "SET_TRIAGE",
+        payload: { scanId: lastScanId, findingId: id, status },
+      });
+      if (result?.success) {
+        const v = allVulns.find(x => x.id === id);
+        if (v) v.triageStatus = status;
+        renderCards();
+      } else {
+        alert("Triage non enregistré : " + (result?.error || "erreur inconnue"));
+      }
+    });
+  });
 }
 
 function buildCardHtml(v) {
@@ -495,7 +519,7 @@ function buildCardHtml(v) {
     : "#22c55e";
 
   return `
-    <div class="vuln-card sev-${v.severity} ${isOpen ? "expanded" : ""}" data-id="${v.id}">
+    <div class="vuln-card sev-${v.severity} ${isOpen ? "expanded" : ""} ${v.triageStatus === "false_positive" ? "triaged-fp" : ""}" data-id="${v.id}">
       <div class="card-head" data-id="${v.id}">
         <span class="card-toggle">▶</span>
         <div class="card-head-main">
@@ -587,6 +611,14 @@ function buildCardHtml(v) {
                 <div class="ref-key">Lien externe</div>
                 <div class="ref-val"><a href="${r.url}" target="_blank">${escapeHtml(r.label)}</a></div>
               </div>`).join("")}
+          </div>
+        </div>
+
+        <div class="card-section">
+          <div class="section-label">Triage</div>
+          <div class="section-content" style="display:flex;gap:8px">
+            <button class="btn btn-secondary triage-btn" data-id="${v.id}" data-status="confirmed" style="font-size:11px;padding:4px 10px">✓ Confirmé</button>
+            <button class="btn btn-secondary triage-btn" data-id="${v.id}" data-status="false_positive" style="font-size:11px;padding:4px 10px">✕ Faux positif</button>
           </div>
         </div>
       </div>
