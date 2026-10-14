@@ -268,14 +268,34 @@ web standard).
 
 Dépend des Rounds 6 (preuve) et 7 (triage) pour les données enrichies.
 
-### 4.1 Preuve requête/réponse dans les exports
+### 4.1 Exclusion des faux positifs des exports (rattrapage §3.4)
+
+Le §3.4 (Round 7) prévoyait déjà cette règle mais elle n'a jamais été
+implémentée — vérifié directement dans le code mergé : `exportReport(format)`
+(`panel.js`) construit `scan.vulnerabilities = allVulns` sans filtrage, puis
+dispatche vers `buildCSV`/`buildXML`/`buildHTMLReport`/le futur `buildSARIF`
+(§4.3) ; une carte marquée `triageStatus === "false_positive"` (Round 7 §3.4)
+part donc aujourd'hui dans tous les formats au même titre que les autres.
+
+Comportement cible : `exportReport()` filtre `allVulns` sur
+`v.triageStatus !== "false_positive"` avant de construire `scan` pour CHAQUE
+format (JSON, CSV, XML, HTML, PDF, SARIF) — pas de filtrage spécifique par
+format, un seul point de filtrage en amont. Un contrôle explicite (case à
+cocher "Inclure les faux positifs" dans `.export-group`, décochée par défaut,
+persistée comme le reste de la config) permet d'inclure volontairement les
+faux positifs dans un export donné. Pas de boîte de dialogue modale — ce
+panel n'en a aucune aujourd'hui (le groupe d'export est une rangée de
+boutons à un clic), introduire ce pattern pour ce seul besoin serait hors
+proportion ; un contrôle inline suffit.
+
+### 4.2 Preuve requête/réponse dans les exports
 
 `evidenceRequest`/`evidenceResponse` (Round 6) ajoutés aux exports JSON
 (déjà automatique, c'est le même objet), XML (`buildXML` — nouvelle balise
 `<evidence-request>`/`<evidence-response>` avec CDATA), et HTML (`buildHTMLReport`
 — nouvelle colonne/section dépliable par finding).
 
-### 4.2 Export SARIF 2.1.0
+### 4.3 Export SARIF 2.1.0
 
 Nouveau format dans `exportReport()` (`panel.js`) : `buildSARIF(scan)` génère
 un document [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/) —
@@ -285,7 +305,7 @@ un document [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/) —
 pipelines CI — l'artefact "pro" le plus visible manquant aujourd'hui vs
 Burp/Nuclei/Semgrep. Nouveau bouton `⬇ SARIF` dans la status bar.
 
-### 4.3 Résumé exécutif data-driven
+### 4.4 Résumé exécutif data-driven
 
 `buildHTMLReport()` a aujourd'hui un paragraphe fixe (mêmes phrases à chaque
 rapport, seuls les chiffres changent). Remplacé par un texte généré à partir
@@ -293,7 +313,7 @@ des findings réels : top 3 catégories OWASP par contribution au score de
 risque, et — si un scan précédent existe pour la même URL en historique —
 comparaison ("+2 critiques depuis le dernier scan du 12/10").
 
-### 4.4 Snippets de remédiation
+### 4.5 Snippets de remédiation
 
 `taxonomy.js` : chaque entrée gagne un champ optionnel `remediationSnippet`
 (exemple de code court, ex. requête paramétrée pour `sqli`, en-tête CSP
@@ -302,7 +322,7 @@ exports HTML/SARIF (`results[].fixes` en SARIF). Couvre d'abord les types à
 fort volume : `sqli`, `xss`, `missing-header`, `insecure-cookie`,
 `outdated-library` — pas les 30 types d'un coup (YAGNI, on complète au besoin).
 
-### 4.5 Mini-graphe de tendance
+### 4.6 Mini-graphe de tendance
 
 La table `scans` (SQLite) a déjà `score` et `started_at` par URL. Nouvelle
 requête `database/db.py::risk_trend(url, limit=10)` → liste de
@@ -310,17 +330,22 @@ requête `database/db.py::risk_trend(url, limit=10)` → liste de
 le donut existant — pas de dépendance charting) dans l'onglet Historique et
 dans l'en-tête du rapport HTML exporté.
 
-### 4.6 PDF
+### 4.7 PDF
 
 Pas de changement d'approche (impression navigateur conservée — non-objectif
 §1). Amélioration du CSS d'impression existant (`@media print`) : répétition
 de l'en-tête par page, évite la coupure d'une carte de finding entre deux
 pages (`page-break-inside: avoid`).
 
-### 4.7 Tests (Round 8)
+### 4.8 Tests (Round 8)
 
 - `test_sarif.py` — validité structurelle du document généré (schéma SARIF minimal)
 - `test_risk_trend.py` — requête SQL sur fixtures de scans historiques
+- Pas de test framework pour l'extension (non-objectif §1, inchangé) : §4.1
+  (exclusion des faux positifs) se vérifie par trace manuelle sur
+  `exportReport()` — un scan avec au moins un finding `triageStatus:
+  "false_positive"` exporté dans chaque format sans la case cochée ne doit
+  jamais le contenir ; cochée, il doit apparaître dans tous les formats.
 - Vérification manuelle du rendu HTML/PDF (pas d'automatisation visuelle introduite)
 
 ---
