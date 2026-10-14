@@ -45,7 +45,17 @@ class NoSqliModule(ScannerModule):
                     baseline_status >= 400 and response.status_code < 400
                     and response.status_code != baseline_status
                 )
-                body_grew = len(response.text) > baseline_len * self.BODY_GROWTH_THRESHOLD
+                # body_grew doit signaler un vrai changement de comportement, pas juste du
+                # bruit de taille entre deux status codes différents : un 401 à corps vide
+                # suivi d'un 400 de validation ("password must be a string") est un rejet
+                # correct, pas une fuite — on l'exclut en exigeant le MÊME status code que
+                # la baseline (et un baseline_len > 0 pour éviter la dégénérescence "tout
+                # corps non-vide est une croissance" quand la baseline est vide).
+                body_grew = (
+                    baseline_len > 0
+                    and response.status_code == baseline_status
+                    and len(response.text) > baseline_len * self.BODY_GROWTH_THRESHOLD
+                )
                 if status_improved or body_grew:
                     findings.append(Finding(
                         type="nosqli", severity="critical",

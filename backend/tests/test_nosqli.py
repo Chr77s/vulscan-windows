@@ -31,6 +31,20 @@ def test_nosqli_ignores_when_behavior_matches_baseline(mocker):
     assert findings == []
 
 
+def test_nosqli_ignores_longer_body_on_different_rejecting_status_code(mocker):
+    """Un 401 à corps vide suivi d'un 400 de validation ('password must be a string') est un
+    rejet correct de l'API (payload malformé), pas une fuite — même si le corps est plus
+    long que le corps vide de la baseline. Sous l'ancienne logique (body_grew sans contrainte
+    de status code), cette fausse croissance aurait déclenché un finding critique à tort."""
+    from scanner.modules.nosqli import NoSqliModule
+    baseline = mocker.Mock(status_code=401, headers={}, text="")
+    rejection = mocker.Mock(status_code=400, headers={}, text='{"error":"password must be a string"}')
+    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [rejection] * 10)
+    ctx = {"crawled": {"api_endpoints": ["http://example.com/api/login"]}}
+    findings = NoSqliModule().scan("http://example.com/", ctx)
+    assert findings == []
+
+
 def test_nosqli_skips_endpoint_when_baseline_is_404(mocker):
     from scanner.modules.nosqli import NoSqliModule
     baseline = mocker.Mock(status_code=404, headers={}, text="not found")

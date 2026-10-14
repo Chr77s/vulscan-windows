@@ -265,7 +265,7 @@ const SCAN_PROFILES = {
     // Focus API REST/GraphQL
     "tech-fingerprint", "jwt-analysis", "cors-misconfig", "rate-limit",
     "json-fuzzer", "graphql", "header-injection", "param-discovery",
-    "info-disclosure",
+    "info-disclosure", "nosqli",
   ],
 };
 
