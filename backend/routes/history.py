@@ -6,12 +6,13 @@ Endpoints d'historique des scans (SQLite côté backend).
   GET  /history/<id>        — récupère un scan
   POST /history/diff        — compare 2 scans { a, b }
   DELETE /history/<id>      — supprime
+  PATCH  /history/triage/<id> — statut de triage { status, note? }
 """
 from flask import Blueprint, request, jsonify
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database.db import init_db, save_scan, list_scans, get_scan, delete_scan, diff_scans
+from database.db import init_db, save_scan, list_scans, get_scan, delete_scan, diff_scans, set_triage
 
 history_bp = Blueprint("history", __name__)
 
@@ -57,3 +58,16 @@ def diff():
     if not a or not b:
         return jsonify({"error": "a et b requis"}), 400
     return jsonify(diff_scans(a, b))
+
+
+@history_bp.route("/triage/<finding_id>", methods=["PATCH"])
+def triage(finding_id):
+    body = request.get_json(silent=True) or {}
+    status = body.get("status")
+    try:
+        ok = set_triage(finding_id, status, body.get("note"))
+    except ValueError:
+        return jsonify({"error": "status invalide"}), 400
+    if not ok:
+        return jsonify({"error": "introuvable"}), 404
+    return jsonify({"success": True})

@@ -18,6 +18,7 @@ import threading
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vulnscan.db")
 _lock = threading.Lock()  # SQLite est thread-safe en mode WAL, mais on protège côté Python
+TRIAGE_STATUSES = {"unreviewed", "confirmed", "false_positive"}
 
 
 def _connect() -> sqlite3.Connection:
@@ -70,6 +71,11 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
             CREATE INDEX IF NOT EXISTS idx_findings_type     ON findings(type);
         """)
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(findings)").fetchall()}
+        if "triage_status" not in cols:
+            conn.execute("ALTER TABLE findings ADD COLUMN triage_status TEXT DEFAULT 'unreviewed'")
+        if "triage_note" not in cols:
+            conn.execute("ALTER TABLE findings ADD COLUMN triage_note TEXT")
 
 
 # -----------------------------------------------------------------
@@ -164,6 +170,17 @@ def get_scan(scan_id: str) -> Optional[Dict[str, Any]]:
 def delete_scan(scan_id: str) -> bool:
     with _lock, _connect() as conn:
         c = conn.execute("DELETE FROM scans WHERE id = ?", (scan_id,))
+        return c.rowcount > 0
+
+
+def set_triage(finding_id: str, status: str, note: Optional[str] = None) -> bool:
+    if not isinstance(status, str) or status not in TRIAGE_STATUSES:
+        raise ValueError(f"status invalide : {status}")
+    with _lock, _connect() as conn:
+        c = conn.execute(
+            "UPDATE findings SET triage_status = ?, triage_note = ? WHERE id = ?",
+            (status, note, finding_id),
+        )
         return c.rowcount > 0
 
 
