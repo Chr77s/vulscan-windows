@@ -23,4 +23,15 @@ def test_run_scan_discovery_includes_full_form_list(mocker):
 
     resp = client.post("/scanner/run", json={"target": "http://x/"})
     data = resp.get_json()
-    assert data["discovery"]["forms"] == forms
+    returned_forms = data["discovery"]["forms"]
+    assert len(returned_forms) == 1
+    returned_form = returned_forms[0]
+    # action/method/id must survive untouched
+    assert returned_form["action"] == "http://x/login"
+    assert returned_form["method"] == "POST"
+    assert returned_form["id"] == "login-form"
+    # Fix 6 (final-fix-wave) : field.value must NOT appear in the response —
+    # the Surface tab never renders it, so it should never leave the backend.
+    returned_fields = returned_form["fields"]
+    assert returned_fields == [{"name": "user", "type": "text", "required": True}]
+    assert "value" not in returned_fields[0]

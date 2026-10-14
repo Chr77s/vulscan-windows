@@ -69,6 +69,37 @@ def test_engine_run_records_per_module_log():
     assert engine.last_module_log[0]["elapsed_ms"] >= 0
 
 
+def test_engine_run_records_crash_distinctly_in_module_log():
+    """Fix 5 (final-fix-wave) : un module qui raise doit produire une entrée de
+    last_module_log distinguable d'un succès à 0 finding (status: "error")."""
+    from scanner.core.engine import ScannerEngine
+    from scanner.core.module_base import ScannerModule
+
+    class CrashingModule(ScannerModule):
+        name = "crashing"
+        category = "test"
+        default_enabled = True
+
+        def scan(self, target, context):
+            raise RuntimeError("boom")
+
+    engine = ScannerEngine()
+    engine.register(CrashingModule)
+    engine.run(
+        "http://example.com",
+        context={"crawled": {"urls": [], "forms": [], "api_endpoints": [], "stats": {}}},
+        enabled=["crashing"],
+        crawl=False,
+    )
+
+    assert len(engine.last_module_log) == 1
+    entry = engine.last_module_log[0]
+    assert entry["module"] == "crashing"
+    assert entry["findings"] == 0
+    assert entry["status"] == "error"
+    assert "boom" in entry["error"]
+
+
 def test_engine_auto_discovery():
     """Vérifie qu'on découvre bien les modules du package scanner.modules."""
     engine = ScannerEngine()

@@ -111,6 +111,11 @@ class ScannerEngine:
                     "module": cls.name,
                     "findings": 0,
                     "elapsed_ms": round((time.monotonic() - t0) * 1000, 1),
+                    # Fix 5 (final-fix-wave) : distingue un crash d'un "0 findings"
+                    # propre — sans ce champ, panel.js affichait les deux de façon
+                    # identique ("✓ module — 0 findings"), masquant le crash.
+                    "status": "error",
+                    "error": str(e),
                 })
 
         # Fusion bayésienne

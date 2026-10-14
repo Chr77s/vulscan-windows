@@ -32,6 +32,26 @@ def list_modules():
     return jsonify({"modules": get_engine().list_modules()})
 
 
+def _strip_field_values(fields):
+    """Retire la clé 'value' de chaque champ de formulaire avant de la renvoyer
+    à l'extension (Fix 6, final-fix-wave) : la Surface tab ne lit jamais
+    field.value (name/type seulement), mais le backend le capturait, le
+    transmettait et le stockait quand même — risque de fuite de données
+    saisies par l'utilisateur (tokens CSRF, __VIEWSTATE, etc.) sans aucun usage."""
+    return [{k: v for k, v in f.items() if k != "value"} for f in (fields or [])]
+
+
+def _module_log_entry(e):
+    """Convertit une entrée brute de engine.last_module_log au format camelCase
+    de l'API ; expose status/error quand le module a crashé (Fix 5, final-fix-wave)
+    sans changer la forme des entrées réussies."""
+    entry = {"module": e["module"], "findings": e["findings"], "elapsedMs": e["elapsed_ms"]}
+    if e.get("status") == "error":
+        entry["status"] = "error"
+        entry["error"] = e.get("error")
+    return entry
+
+
 @scanner_bp.route("/run", methods=["POST"])
 def run_scan():
     """
@@ -66,13 +86,13 @@ def run_scan():
             },
             "discovery": {
                 "urls":          (context.get("crawled") or {}).get("urls", [])[:20],
-                "forms":         (context.get("crawled") or {}).get("forms", [])[:20],
+                "forms":         [
+                    {**form, "fields": _strip_field_values(form.get("fields"))}
+                    for form in (context.get("crawled") or {}).get("forms", [])[:20]
+                ],
                 "endpoints":     (context.get("crawled") or {}).get("api_endpoints", [])[:10],
             },
-            "moduleLog": [
-                {"module": e["module"], "findings": e["findings"], "elapsedMs": e["elapsed_ms"]}
-                for e in engine.last_module_log
-            ],
+            "moduleLog": [_module_log_entry(e) for e in engine.last_module_log],
         })
     except Exception as e:
         logger.exception("Scan engine error")
