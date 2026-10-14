@@ -13,9 +13,9 @@ OWASP A03 / CWE-78.
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -57,7 +57,10 @@ class CommandInjectionModule(ScannerModule):
                     new_params = dict(params)
                     new_params[param_name] = base_value + payload
                     test_url = urlunparse(parsed._replace(query=urlencode(new_params)))
-                    r = requests.get(test_url, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+                    r, req_ev, resp_ev = http.get(test_url, context, capture=True, timeout=8,
+                                                   headers={"User-Agent": "VulnScan/1.2"})
+                    if r is None:
+                        continue
                     if re.search(sig, r.text):
                         match_text = re.search(sig, r.text).group(0)
                         findings.append(Finding(
@@ -80,6 +83,7 @@ class CommandInjectionModule(ScannerModule):
                             cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
                             detection_method="payload-signature",
                             source="module:command-injection",
+                            evidence_request=req_ev, evidence_response=resp_ev,
                         ))
                         break
                 except Exception:

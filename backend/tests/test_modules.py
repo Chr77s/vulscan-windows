@@ -86,6 +86,14 @@ def test_lfi_confirmed_finding_has_evidence_request_response(mocker):
     assert confirmed[0].evidence_response["body_snippet"].startswith("root:x:0:0")
 
 
+def test_command_injection_confirmed_finding_has_evidence(mocker):
+    from scanner.modules.command_injection import CommandInjectionModule
+    confirming = mocker.Mock(status_code=200, headers={}, text="uid=0(root) gid=0(root)")
+    mocker.patch("scanner.core.http.requests.request", return_value=confirming)
+    findings = CommandInjectionModule().scan("http://example.com/?cmd=ping", {})
+    assert findings and findings[0].evidence_request is not None
+
+
 def test_lfi_signatures():
     """La regex root:x:0:0 doit matcher un /etc/passwd typique."""
     from scanner.modules.lfi import LfiModule

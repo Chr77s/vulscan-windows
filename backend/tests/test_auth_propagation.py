@@ -98,6 +98,21 @@ def test_xxe_module_propagates_auth(mocker):
     assert_module_propagates_auth(mocker, XxeModule, "http://example.com/api/xml")
 
 
+def test_command_injection_module_propagates_auth(mocker):
+    from scanner.modules.command_injection import CommandInjectionModule
+    assert_module_propagates_auth(mocker, CommandInjectionModule, "http://example.com/?cmd=ping")
+
+
+def test_idor_module_propagates_auth(mocker):
+    from scanner.modules.idor import IdorModule
+    assert_module_propagates_auth(mocker, IdorModule, "http://example.com/?id=5")
+
+
+def test_open_redirect_module_propagates_auth(mocker):
+    from scanner.modules.open_redirect import OpenRedirectModule
+    assert_module_propagates_auth(mocker, OpenRedirectModule, "http://example.com/?next=/home")
+
+
 def test_subdomain_enum_never_sends_auth_header_to_crtsh(mocker):
     """subdomain_enum ne passe par scanner.core.http pour rien (aucun HTTP vers la cible) ;
     son unique appel réseau (crt.sh, service tiers) ne doit jamais recevoir le Bearer/cookie

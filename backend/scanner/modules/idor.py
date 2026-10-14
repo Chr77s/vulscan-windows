@@ -13,10 +13,10 @@ OWASP A01 / CWE-639.
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-import requests
 import difflib
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -38,7 +38,9 @@ class IdorModule(ScannerModule):
         params = dict(parse_qsl(parsed.query))
 
         try:
-            r_base = requests.get(target, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+            r_base = http.get(target, context, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+            if r_base is None:
+                return findings
             body_base = r_base.text
         except Exception:
             return findings
@@ -59,8 +61,11 @@ class IdorModule(ScannerModule):
                     new_params = dict(params)
                     new_params[param_name] = new_id
                     test_url = urlunparse(parsed._replace(query=urlencode(new_params)))
-                    r = requests.get(test_url, timeout=8, allow_redirects=False,
-                                     headers={"User-Agent": "VulnScan/1.2"})
+                    r, req_ev, resp_ev = http.get(test_url, context, capture=True, timeout=8,
+                                                   allow_redirects=False,
+                                                   headers={"User-Agent": "VulnScan/1.2"})
+                    if r is None:
+                        continue
 
                     # Bonne signature : 200 + contenu non identique + pas de redirection login
                     is_login_redirect = (
@@ -93,6 +98,7 @@ class IdorModule(ScannerModule):
                                 cvss_base=8.1,
                                 detection_method="id-walk",
                                 source="module:idor",
+                                evidence_request=req_ev, evidence_response=resp_ev,
                             ))
                             break
                 except Exception:

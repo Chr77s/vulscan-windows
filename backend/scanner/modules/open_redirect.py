@@ -9,9 +9,9 @@ OWASP A01 / CWE-601.
 from __future__ import annotations
 from typing import List, Dict, Any
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-import requests
 import re
 
+from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 
 
@@ -46,8 +46,11 @@ class OpenRedirectModule(ScannerModule):
             test_url = urlunparse(parsed._replace(query=urlencode(new_params)))
 
             try:
-                r = requests.get(test_url, timeout=8, allow_redirects=False,
-                                 headers={"User-Agent": "VulnScan/1.2"})
+                r, req_ev, resp_ev = http.get(test_url, context, capture=True, timeout=8,
+                                               allow_redirects=False,
+                                               headers={"User-Agent": "VulnScan/1.2"})
+                if r is None:
+                    continue
                 if r.status_code in (301, 302, 303, 307, 308):
                     location = r.headers.get("Location", "")
                     loc_host = urlparse(location).hostname or ""
@@ -71,6 +74,7 @@ class OpenRedirectModule(ScannerModule):
                             cvss_base=6.1,
                             detection_method="canary-redirect",
                             source="module:open-redirect",
+                            evidence_request=req_ev, evidence_response=resp_ev,
                         ))
             except Exception:
                 continue
