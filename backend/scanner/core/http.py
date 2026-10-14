@@ -21,11 +21,14 @@ from __future__ import annotations
 from typing import Dict, Any, Optional
 import requests
 import logging
+import time
 
 logger = logging.getLogger("vulnscan.http")
 
 DEFAULT_TIMEOUT = 8
 DEFAULT_UA = "VulnScan/1.4 (security-audit)"
+MAX_BODY_SNIPPET = 4096
+SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie"}
 
 
 def _merged_kwargs(context: Optional[Dict[str, Any]], kwargs: dict) -> dict:
@@ -64,25 +67,63 @@ def _merged_kwargs(context: Optional[Dict[str, Any]], kwargs: dict) -> dict:
     return out
 
 
+def _redact_headers(headers):
+    """Masque les en-têtes sensibles (Authorization, Cookie, Set-Cookie) avant de les exposer en evidence."""
+    return {k: ("***" if k.lower() in SENSITIVE_HEADERS else v) for k, v in (headers or {}).items()}
+
+
+def _build_evidence(method, url, opts, response, elapsed_ms):
+    """Construit les dicts d'evidence request/response à partir des opts fusionnés et de la réponse.
+
+    N'accède jamais à opts["auth"] (le tuple Basic Auth) : seuls headers/data/json sont lus ici,
+    donc un éventuel secret Basic Auth ne peut pas fuiter dans l'evidence.
+    """
+    req_ev = {
+        "method": method.upper(),
+        "url": url,
+        "headers": _redact_headers(opts.get("headers")),
+        "body": opts.get("data") if opts.get("data") is not None else opts.get("json"),
+    }
+    resp_ev = {
+        "status": response.status_code,
+        "headers": _redact_headers(dict(response.headers)),
+        "body_snippet": (response.text or "")[:MAX_BODY_SNIPPET],
+        "elapsed_ms": round(elapsed_ms, 1),
+    }
+    return req_ev, resp_ev
+
+
 def send(method: str,
          url: str,
          context: Optional[Dict[str, Any]] = None,
-         **kwargs) -> Optional[requests.Response]:
-    """Envoie une requête HTTP avec l'auth du contexte injectée. Retourne None en cas d'erreur."""
+         capture: bool = False,
+         **kwargs):
+    """Envoie une requête HTTP avec l'auth du contexte injectée.
+
+    Par défaut (capture=False) : comportement inchangé, retourne la Response ou None en cas d'erreur.
+    Si capture=True : retourne un triplet (response_ou_none, evidence_request_ou_none, evidence_response_ou_none).
+    L'evidence ne contient jamais de secret en clair (headers sensibles redactés, tuple Basic Auth jamais lu).
+    """
+    opts = _merged_kwargs(context, kwargs)
     try:
-        opts = _merged_kwargs(context, kwargs)
-        return requests.request(method.upper(), url, **opts)
+        start = time.monotonic()
+        response = requests.request(method.upper(), url, **opts)
+        elapsed_ms = (time.monotonic() - start) * 1000
     except requests.exceptions.RequestException as e:
         logger.debug(f"HTTP {method} {url} failed: {e}")
-        return None
+        return (None, None, None) if capture else None
+
+    if capture:
+        return response, *_build_evidence(method, url, opts, response, elapsed_ms)
+    return response
 
 
-def get(url: str, context=None, **kwargs):
-    return send("GET", url, context, **kwargs)
+def get(url: str, context=None, capture: bool = False, **kwargs):
+    return send("GET", url, context, capture=capture, **kwargs)
 
 
-def post(url: str, context=None, **kwargs):
-    return send("POST", url, context, **kwargs)
+def post(url: str, context=None, capture: bool = False, **kwargs):
+    return send("POST", url, context, capture=capture, **kwargs)
 
 
 def has_auth(context: Optional[Dict[str, Any]]) -> bool:
