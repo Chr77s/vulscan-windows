@@ -15,6 +15,7 @@ let currentSearch  = "";
 let currentTab     = "results";
 let scanHistory    = [];
 let cmpSelection   = new Set();  // ids des scans sélectionnés pour comparaison
+let trafficExpandedIds = new Set();  // ids des lignes "Trafic" dépliées
 
 const SEVERITY_ORDER  = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const SEVERITY_WEIGHT = { critical: 10, high: 6, medium: 3, low: 1, info: 0 };
@@ -160,6 +161,7 @@ function switchTab(name) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.dataset.tabPanel === name));
   if (name === "history") loadHistory();
+  if (name === "traffic") renderTraffic();
 }
 
 // =====================================================
@@ -250,6 +252,7 @@ function renderAll() {
   renderDonut();
   renderTypes();
   renderCards();
+  renderTraffic();
   updateFilterCounts();
 }
 
@@ -776,6 +779,117 @@ function renderDiff(scanA, scanB, diff) {
 
     ${diff.changed.length > 0 ? `<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:0.05em;color:#eab308;margin:18px 0 10px">Δ Vulnérabilités modifiées</h3>${diff.changed.map(changedCard).join("")}` : ""}
   `;
+}
+
+// =====================================================
+// TRAFIC (preuves requête/réponse HTTP capturées — Round 7)
+// =====================================================
+function renderTraffic() {
+  const list = document.getElementById("trafficList");
+  const countEl = document.getElementById("tabTrafficCount");
+  if (!list) return;
+
+  const filtered = allVulns.filter(v => v.evidenceRequest);
+
+  if (countEl) countEl.textContent = filtered.length;
+
+  if (filtered.length === 0) {
+    list.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🌐</div>
+        <div>Aucune requête HTTP capturée pour l'instant.</div>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(buildTrafficRowHtml).join("");
+
+  list.querySelectorAll(".traffic-row-head").forEach(el => {
+    el.addEventListener("click", () => toggleTrafficRow(el.dataset.id));
+  });
+}
+
+function toggleTrafficRow(id) {
+  if (trafficExpandedIds.has(id)) trafficExpandedIds.delete(id);
+  else trafficExpandedIds.add(id);
+  renderTraffic();
+}
+
+// Rend un objet headers {Name: value} en lignes "Name: value", chaque partie échappée
+// individuellement (noms ET valeurs sont des données réseau non fiables).
+function formatHeadersForDisplay(headers) {
+  return Object.entries(headers || {})
+    .map(([name, value]) => `${escapeHtml(name)}: ${escapeHtml(value)}`)
+    .join("\n");
+}
+
+// Le corps capturé peut être une chaîne (opts.data) ou un objet JSON (opts.json) ou absent.
+function formatBodyForDisplay(body) {
+  if (body == null) return "";
+  if (typeof body === "string") return body;
+  try {
+    return JSON.stringify(body);
+  } catch {
+    return String(body);
+  }
+}
+
+function buildRequestRawHtml(req) {
+  const parts = [`${escapeHtml(req.method || "")} ${escapeHtml(req.url || "")}`];
+  const headers = formatHeadersForDisplay(req.headers);
+  if (headers) parts.push(headers);
+  const body = formatBodyForDisplay(req.body);
+  if (body) parts.push(escapeHtml(body));
+  return parts.join("\n\n");
+}
+
+function buildResponseRawHtml(resp) {
+  const parts = [escapeHtml(resp.status != null ? String(resp.status) : "—")];
+  const headers = formatHeadersForDisplay(resp.headers);
+  if (headers) parts.push(headers);
+  if (resp.body_snippet) parts.push(escapeHtml(resp.body_snippet));
+  return parts.join("\n\n");
+}
+
+function buildTrafficRowHtml(v) {
+  const req = v.evidenceRequest || {};
+  const resp = v.evidenceResponse || {};
+  const isOpen = trafficExpandedIds.has(v.id);
+  const typeLabel = v.title || TYPE_LABEL[v.type] || v.type;
+
+  return `
+    <div class="vuln-card sev-${v.severity} ${isOpen ? "expanded" : ""}" data-id="${v.id}">
+      <div class="card-head traffic-row-head" data-id="${v.id}">
+        <span class="card-toggle">▶</span>
+        <div class="card-head-main">
+          <div class="card-head-title">
+            <span class="badge badge-neutral">${escapeHtml(req.method || "?")}</span>
+            <span class="badge badge-neutral">${escapeHtml(resp.status != null ? String(resp.status) : "—")}</span>
+            <span class="badge badge-${v.severity}">${SEVERITY_LABEL[v.severity] || v.severity}</span>
+            <strong>${escapeHtml(typeLabel)}</strong>
+          </div>
+          <div class="card-head-meta" style="margin-top:6px">
+            <span style="font-family:monospace;font-size:11.5px;color:var(--text-2);word-break:break-all">${escapeHtml(req.url || "")}</span>
+            ${resp.elapsed_ms != null ? `<span><b>Latence :</b> ${escapeHtml(String(resp.elapsed_ms))} ms</span>` : ""}
+          </div>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="card-section">
+          <div class="ref-grid">
+            <div>
+              <div class="section-label">➡ Requête</div>
+              <div class="evidence">${buildRequestRawHtml(req)}</div>
+            </div>
+            <div>
+              <div class="section-label">⬅ Réponse</div>
+              <div class="evidence">${buildResponseRawHtml(resp)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
 }
 
 // =====================================================

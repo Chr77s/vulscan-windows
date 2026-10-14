@@ -610,6 +610,7 @@
     <button class="tab active" data-tab="results">📋 Résultats <span id="tabResultCount" style="opacity:.6;font-size:10px;margin-left:4px">0</span></button>
     <button class="tab"        data-tab="history">🕘 Historique <span id="tabHistoryCount" style="opacity:.6;font-size:10px;margin-left:4px">0</span></button>
     <button class="tab"        data-tab="diff">⇆ Diff</button>
+    <button class="tab"        data-tab="traffic">🌐 Trafic <span id="tabTrafficCount" style="opacity:.6;font-size:10px;margin-left:4px">0</span></button>
   </div>
 
   <!-- MAIN GRID (tab résultats) -->
@@ -678,6 +679,13 @@
   <main class="tab-panel" data-tab-panel="diff" style="flex:1;flex-direction:column;background:var(--bg-0);overflow-y:auto">
     <div id="diffContent" style="padding:20px">
       <div class="empty"><div class="empty-icon">⇆</div><div>Comparez deux scans depuis l'onglet Historique.</div></div>
+    </div>
+  </main>
+
+  <!-- TAB TRAFIC (requêtes/réponses HTTP capturées) -->
+  <main class="tab-panel" data-tab-panel="traffic" style="flex:1;flex-direction:column;background:var(--bg-0);overflow-y:auto">
+    <div class="cards-container" id="trafficList">
+      <div class="empty"><div class="empty-icon">🌐</div><div>Aucune requête HTTP capturée pour l'instant.</div></div>
     </div>
   </main>
 
