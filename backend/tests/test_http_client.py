@@ -88,6 +88,16 @@ def test_capture_truncates_body_snippet_to_4096_bytes(mocker):
     _, _, resp_ev = http.send("GET", "http://example.com/x", capture=True)
     assert len(resp_ev["body_snippet"]) == 4096
 
+def test_capture_truncates_multibyte_body_snippet_to_4096_bytes_not_chars(mocker):
+    from scanner.core import http
+    # "é" encodes to 2 bytes in UTF-8. 3000 chars -> 6000 bytes, well over the 4096
+    # byte cap. Character-count slicing (text[:4096]) would keep all 3000 chars
+    # (8000 bytes when re-encoded) since 3000 < 4096 chars but 6000 > 4096 bytes.
+    fake = mocker.Mock(status_code=200, headers={}, text="é" * 3000)
+    mocker.patch("scanner.core.http.requests.request", return_value=fake)
+    _, _, resp_ev = http.send("GET", "http://example.com/x", capture=True)
+    assert len(resp_ev["body_snippet"].encode("utf-8")) <= 4096
+
 def test_send_capture_on_network_error_returns_none_triple(mocker):
     from scanner.core import http
     import requests as requests_module

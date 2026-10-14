@@ -72,6 +72,18 @@ def _redact_headers(headers):
     return {k: ("***" if k.lower() in SENSITIVE_HEADERS else v) for k, v in (headers or {}).items()}
 
 
+def _truncate_body(text: str, max_bytes: int) -> str:
+    """Tronque `text` à `max_bytes` octets UTF-8 (pas à `max_bytes` caractères).
+
+    Un corps de réponse peut contenir des caractères multi-octets (accents, etc.) :
+    tronquer par nombre de caractères peut produire un snippet encodant à plus de
+    `max_bytes` octets. On encode d'abord, on tronque les octets, puis on décode en
+    ignorant la séquence multi-octets éventuellement coupée en deux à la frontière.
+    """
+    encoded = (text or "").encode("utf-8")[:max_bytes]
+    return encoded.decode("utf-8", errors="ignore")
+
+
 def _build_evidence(method, url, opts, response, elapsed_ms):
     """Construit les dicts d'evidence request/response à partir des opts fusionnés et de la réponse.
 
@@ -87,7 +99,7 @@ def _build_evidence(method, url, opts, response, elapsed_ms):
     resp_ev = {
         "status": response.status_code,
         "headers": _redact_headers(dict(response.headers)),
-        "body_snippet": (response.text or "")[:MAX_BODY_SNIPPET],
+        "body_snippet": _truncate_body(response.text, MAX_BODY_SNIPPET),
         "elapsed_ms": round(elapsed_ms, 1),
     }
     return req_ev, resp_ev
