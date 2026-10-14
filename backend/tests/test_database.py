@@ -49,6 +49,44 @@ def test_list_scans(monkeypatch, tmp_path):
     assert scans[0]["id"] == "scan-2"
 
 
+def test_list_scans_excludes_false_positives_from_live_counts(monkeypatch, tmp_path):
+    """Round 7 follow-up (M1) : set_triage() ne touche que la table `findings`,
+    jamais les colonnes critical/high/.../score/total figées sur `scans` au
+    moment du save_scan(). list_scans() doit donc recalculer ces chiffres en
+    direct (LEFT JOIN sur findings, en excluant triage_status='false_positive'),
+    pas renvoyer les valeurs figées."""
+    db_file = tmp_path / "test.db"
+    from database import db as dbmod
+    monkeypatch.setattr(dbmod, "DB_PATH", str(db_file))
+    dbmod.init_db()
+
+    dbmod.save_scan({
+        "id": "scan-fp", "url": "http://fp.test", "startedAt": 1,
+        "vulnerabilities": [
+            {"id": "f1", "type": "sqli", "severity": "critical", "url": "u"},
+            {"id": "f2", "type": "xss",  "severity": "critical", "url": "u"},
+            {"id": "f3", "type": "weak-csp", "severity": "medium", "url": "u"},
+        ],
+    })
+
+    before = dbmod.list_scans()[0]
+    assert before["critical"] == 2
+    assert before["total"] == 3
+
+    assert dbmod.set_triage("f1", "false_positive") is True
+
+    after = dbmod.list_scans()[0]
+    assert after["critical"] == 1   # f1 excluded, f2 still counted
+    assert after["medium"] == 1
+    assert after["total"] == 2
+    assert after["score"] < before["score"]
+
+    # The stored JSON payload (get_scan) is NOT touched by this fix -- it
+    # stays a frozen snapshot of what was originally saved, by design.
+    stale_payload = dbmod.get_scan("scan-fp")
+    assert len(stale_payload["vulnerabilities"]) == 3
+
+
 def test_diff_scans(monkeypatch, tmp_path):
     db_file = tmp_path / "test.db"
     from database import db as dbmod

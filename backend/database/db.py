@@ -83,19 +83,23 @@ def init_db() -> None:
 # -----------------------------------------------------------------
 SEVERITY_WEIGHT = {"critical": 10, "high": 6, "medium": 3, "low": 1, "info": 0}
 
-def _stats(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
-    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    score = 0
-    for f in findings:
-        sev = f.get("severity", "info")
-        if sev in counts:
-            counts[sev] += 1
-        score += SEVERITY_WEIGHT.get(sev, 0)
+def _score_and_risk(counts: Dict[str, int]) -> tuple:
+    score = sum(counts.get(sev, 0) * weight for sev, weight in SEVERITY_WEIGHT.items())
     if   score == 0:  risk = "Aucun risque"
     elif score < 5:   risk = "Risque faible"
     elif score < 15:  risk = "Risque modéré"
     elif score < 35:  risk = "Risque élevé"
     else:             risk = "Risque critique"
+    return score, risk
+
+
+def _stats(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    for f in findings:
+        sev = f.get("severity", "info")
+        if sev in counts:
+            counts[sev] += 1
+    score, risk = _score_and_risk(counts)
     return {"counts": counts, "score": score, "risk_label": risk}
 
 
@@ -144,19 +148,46 @@ def save_scan(scan: Dict[str, Any]) -> str:
     return scan["id"]
 
 
+# Compte les findings par sévérité pour un scan via LEFT JOIN, EN EXCLUANT les
+# faux positifs (triage_status) — contrairement aux colonnes critical/high/
+# medium/low/info/score/risk_label stockées sur `scans`, qui sont figées au
+# moment du save_scan() et ne sont jamais recalculées quand un finding est
+# triagé après coup (set_triage() ne touche que la table `findings`). Ce
+# recalcul "live" évite que l'export (Round 8 Task 4, le résumé data-driven)
+# et le sparkline de tendance (Task 6) comparent des chiffres qui ne tiennent
+# pas compte du même triage que le rapport affiché lui-même.
+_LIVE_SEVERITY_COUNTS_SQL = """
+    SUM(CASE WHEN f.severity='critical' AND (f.triage_status IS NULL OR f.triage_status != 'false_positive') THEN 1 ELSE 0 END) AS critical,
+    SUM(CASE WHEN f.severity='high'     AND (f.triage_status IS NULL OR f.triage_status != 'false_positive') THEN 1 ELSE 0 END) AS high,
+    SUM(CASE WHEN f.severity='medium'   AND (f.triage_status IS NULL OR f.triage_status != 'false_positive') THEN 1 ELSE 0 END) AS medium,
+    SUM(CASE WHEN f.severity='low'      AND (f.triage_status IS NULL OR f.triage_status != 'false_positive') THEN 1 ELSE 0 END) AS low,
+    SUM(CASE WHEN f.severity='info'     AND (f.triage_status IS NULL OR f.triage_status != 'false_positive') THEN 1 ELSE 0 END) AS info
+"""
+
+
 def list_scans(limit: int = 50, url_filter: Optional[str] = None) -> List[Dict[str, Any]]:
     with _lock, _connect() as conn:
-        if url_filter:
-            rows = conn.execute("""
-                SELECT id, url, started_at, finished_at, total, critical, high, medium, low, info, score, risk_label
-                FROM scans WHERE url LIKE ? ORDER BY started_at DESC LIMIT ?
-            """, (f"%{url_filter}%", limit)).fetchall()
-        else:
-            rows = conn.execute("""
-                SELECT id, url, started_at, finished_at, total, critical, high, medium, low, info, score, risk_label
-                FROM scans ORDER BY started_at DESC LIMIT ?
-            """, (limit,)).fetchall()
-        return [dict(r) for r in rows]
+        where = "WHERE s.url LIKE ?" if url_filter else ""
+        params = ((f"%{url_filter}%",) if url_filter else ()) + (limit,)
+        rows = conn.execute(f"""
+            SELECT s.id, s.url, s.started_at, s.finished_at,
+                   {_LIVE_SEVERITY_COUNTS_SQL}
+            FROM scans s LEFT JOIN findings f ON f.scan_id = s.id
+            {where}
+            GROUP BY s.id ORDER BY s.started_at DESC LIMIT ?
+        """, params).fetchall()
+
+        result = []
+        for r in rows:
+            counts = {k: r[k] for k in ("critical", "high", "medium", "low", "info")}
+            score, risk_label = _score_and_risk(counts)
+            result.append({
+                "id": r["id"], "url": r["url"], "started_at": r["started_at"], "finished_at": r["finished_at"],
+                "total": sum(counts.values()),
+                **counts,
+                "score": score, "risk_label": risk_label,
+            })
+        return result
 
 
 def get_scan(scan_id: str) -> Optional[Dict[str, Any]]:
@@ -186,11 +217,21 @@ def set_triage(finding_id: str, status: str, note: Optional[str] = None) -> bool
 
 def risk_trend(url: str, limit: int = 10) -> List[Dict[str, Any]]:
     with _lock, _connect() as conn:
-        rows = conn.execute("""
-            SELECT started_at, score FROM scans
-            WHERE url = ? ORDER BY started_at DESC LIMIT ?
+        # Score recalculé en direct (même raison que list_scans ci-dessus) :
+        # le score stocké sur `scans` est figé au save_scan() et ignore tout
+        # triage ultérieur.
+        rows = conn.execute(f"""
+            SELECT s.started_at, {_LIVE_SEVERITY_COUNTS_SQL}
+            FROM scans s LEFT JOIN findings f ON f.scan_id = s.id
+            WHERE s.url = ?
+            GROUP BY s.id ORDER BY s.started_at DESC LIMIT ?
         """, (url, limit)).fetchall()
-        return [{"started_at": r["started_at"], "score": r["score"]} for r in reversed(rows)]
+        result = []
+        for r in reversed(rows):
+            counts = {k: r[k] for k in ("critical", "high", "medium", "low", "info")}
+            score, _ = _score_and_risk(counts)
+            result.append({"started_at": r["started_at"], "score": score})
+        return result
 
 
 def diff_scans(scan_a_id: str, scan_b_id: str) -> Dict[str, Any]:

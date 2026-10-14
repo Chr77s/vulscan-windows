@@ -24,3 +24,31 @@ def test_risk_trend_empty_for_unknown_url(tmp_path, monkeypatch):
     monkeypatch.setattr(db_module, "DB_PATH", str(tmp_path / "test2.db"))
     init_db()
     assert risk_trend("http://never-scanned.example/", limit=10) == []
+
+
+def test_risk_trend_reflects_triage_not_the_frozen_save_time_score(tmp_path, monkeypatch):
+    """Round 7 follow-up (M1) : le score stocké sur `scans` au save_scan() ne
+    bouge jamais quand un finding est triagé plus tard -- risk_trend() doit
+    donc recalculer le score en direct via les triage_status courants, pas
+    lire la colonne figée."""
+    import database.db as db_module
+    from database.db import set_triage
+    monkeypatch.setattr(db_module, "DB_PATH", str(tmp_path / "test3.db"))
+    init_db()
+
+    save_scan({
+        "id": "scan-triaged", "url": "http://trend.test/",
+        "startedAt": 1000, "finishedAt": 1000,
+        "vulnerabilities": [
+            {"id": "t1", "type": "sqli", "severity": "critical", "url": "u"},
+            {"id": "t2", "type": "xss", "severity": "low", "url": "u"},
+        ],
+    })
+
+    before = risk_trend("http://trend.test/", limit=10)
+    assert before[0]["score"] == 11  # 1 critical (10) + 1 low (1)
+
+    assert set_triage("t1", "false_positive") is True
+
+    after = risk_trend("http://trend.test/", limit=10)
+    assert after[0]["score"] == 1  # the critical no longer counts
