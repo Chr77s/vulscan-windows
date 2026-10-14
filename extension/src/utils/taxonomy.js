@@ -27,6 +27,7 @@ export const TAXONOMY = {
       { label: "OWASP XSS Prevention Cheat Sheet", url: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html" },
       { label: "PortSwigger XSS", url: "https://portswigger.net/web-security/cross-site-scripting" },
     ],
+    remediationSnippet: "// Échapper systématiquement la sortie, ou utiliser un framework qui le fait par défaut :\nelement.textContent = userInput; // jamais innerHTML = userInput",
   },
 
   "sqli": {
@@ -42,6 +43,7 @@ export const TAXONOMY = {
       { label: "OWASP SQLi Prevention", url: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html" },
       { label: "PortSwigger SQLi", url: "https://portswigger.net/web-security/sql-injection" },
     ],
+    remediationSnippet: "// Toujours des requêtes paramétrées, jamais de concatenation :\nconst rows = await db.query('SELECT * FROM users WHERE id = ?', [userId]);",
   },
 
   "ssti": {
@@ -96,6 +98,7 @@ export const TAXONOMY = {
       { label: "Snyk Vuln DB", url: "https://security.snyk.io/" },
       { label: "NVD", url: "https://nvd.nist.gov/" },
     ],
+    remediationSnippet: "# Mettre à jour vers la dernière version stable, puis vérifier via :\nnpm audit fix\n# ou l'équivalent du gestionnaire de paquets utilisé",
   },
 
   "sensitive-data": {
@@ -122,6 +125,7 @@ export const TAXONOMY = {
     references: [
       { label: "OWASP Secure Headers Project", url: "https://owasp.org/www-project-secure-headers/" },
     ],
+    remediationSnippet: "Content-Security-Policy: default-src 'self'; script-src 'self'\nX-Content-Type-Options: nosniff\nX-Frame-Options: DENY",
   },
 
   "weak-csp": {
@@ -196,6 +200,7 @@ export const TAXONOMY = {
     references: [
       { label: "OWASP Session Management", url: "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html" },
     ],
+    remediationSnippet: "Set-Cookie: session=...; Secure; HttpOnly; SameSite=Strict",
   },
 
   "tls": {
@@ -234,5 +239,6 @@ export function enrichFinding(v) {
     cvssVector:  v.cvssVector  || tax.cvssVector,
     impact:      v.impact      || tax.impact,
     references:  (v.references && v.references.length) ? v.references : (tax.references || []),
+    remediationSnippet: v.remediationSnippet || tax.remediationSnippet,
   };
 }

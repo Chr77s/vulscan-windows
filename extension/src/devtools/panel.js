@@ -688,6 +688,12 @@ function buildCardHtml(v) {
             <div class="section-content">${escapeHtml(v.recommendation)}</div>
           </div>` : ""}
 
+        ${v.remediationSnippet ? `
+          <div class="card-section">
+            <div class="section-label">🔧 Exemple de correction</div>
+            <div class="section-content"><pre style="font-family:monospace;font-size:11px;white-space:pre-wrap;background:var(--bg-0);padding:8px;border-radius:6px;color:var(--text-1)">${escapeHtml(v.remediationSnippet)}</pre></div>
+          </div>` : ""}
+
         <div class="card-section">
           <div class="section-label">📚 Références</div>
           <div class="ref-grid">
@@ -1460,6 +1466,7 @@ function buildSARIF(scan) {
             artifactLocation: { uri: v.url || scan.url || "" },
           },
         }],
+        ...(v.remediationSnippet ? { fixes: [{ description: { text: v.remediationSnippet } }] } : {}),
       })),
     }],
   }, null, 2);
@@ -1521,6 +1528,7 @@ function buildHTMLReport(scan, forPrint, priorScan) {
             ? `<details><summary style="cursor:pointer;color:#4f46e5;font-size:10px;margin-top:4px">Requête / Réponse capturée</summary><pre style="margin-top:4px">${escapeHtml(JSON.stringify({ request: v.evidenceRequest, response: v.evidenceResponse }, null, 2).slice(0, 2000))}</pre></details>`
             : ""
         }</td>
+        <td>${v.remediationSnippet ? `<pre>${escapeHtml(v.remediationSnippet)}</pre>` : "—"}</td>
       </tr>`).join("");
 
   const autoPrint = forPrint ? `<script>window.addEventListener("load", () => setTimeout(() => window.print(), 300));<\/script>` : "";
@@ -1592,9 +1600,9 @@ function buildHTMLReport(scan, forPrint, priorScan) {
 <h2>Détail des vulnérabilités</h2>
 <table>
   <thead>
-    <tr><th>Sévérité</th><th>Titre</th><th>CVSS</th><th>CWE</th><th>OWASP</th><th>Conf.</th><th>URL</th><th>Paramètre</th><th>Description</th><th>Impact</th><th>Recommandation</th><th>Preuve</th></tr>
+    <tr><th>Sévérité</th><th>Titre</th><th>CVSS</th><th>CWE</th><th>OWASP</th><th>Conf.</th><th>URL</th><th>Paramètre</th><th>Description</th><th>Impact</th><th>Recommandation</th><th>Preuve</th><th>Correction</th></tr>
   </thead>
-  <tbody>${rows || '<tr><td colspan="12" style="text-align:center;color:#94a3b8;padding:20px">Aucune vulnérabilité</td></tr>'}</tbody>
+  <tbody>${rows || '<tr><td colspan="13" style="text-align:center;color:#94a3b8;padding:20px">Aucune vulnérabilité</td></tr>'}</tbody>
 </table>
 
 <footer>
