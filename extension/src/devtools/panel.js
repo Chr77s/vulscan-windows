@@ -1464,6 +1464,13 @@ function buildCSV(scan) {
   return "﻿" + headers.join(",") + "\n" + rows.join("\n");
 }
 
+// Final fix wave (Fix 3) : un « ]]> » littéral dans un contenu capturé (cible
+// scannée potentiellement hostile) fermerait la section CDATA avant l'heure et
+// permettrait d'injecter de la structure XML — on le scinde en deux sections.
+function cdataSafe(s) {
+  return String(s ?? "").replace(/]]>/g, "]]]]><![CDATA[>");
+}
+
 function buildXML(scan) {
   const esc = (s) => String(s ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -1489,16 +1496,16 @@ function buildXML(scan) {
     if (v.owasp) xml += `      <owasp id="${esc(v.owasp.id)}" url="${esc(v.owasp.url)}">${esc(v.owasp.name)}</owasp>\n`;
     xml += `      <url>${esc(v.url)}</url>\n`;
     if (v.parameter) xml += `      <parameter>${esc(v.parameter)}</parameter>\n`;
-    if (v.payload)   xml += `      <payload><![CDATA[${v.payload}]]></payload>\n`;
+    if (v.payload)   xml += `      <payload><![CDATA[${cdataSafe(v.payload)}]]></payload>\n`;
     xml += `      <description>${esc(v.description)}</description>\n`;
     if (v.impact) xml += `      <impact>${esc(v.impact)}</impact>\n`;
     xml += `      <recommendation>${esc(v.recommendation)}</recommendation>\n`;
-    if (v.evidence) xml += `      <evidence><![CDATA[${v.evidence.slice(0, 1000)}]]></evidence>\n`;
+    if (v.evidence) xml += `      <evidence><![CDATA[${cdataSafe(v.evidence.slice(0, 1000))}]]></evidence>\n`;
     if (v.evidenceRequest) {
-      xml += `      <evidence-request><![CDATA[${JSON.stringify(v.evidenceRequest)}]]></evidence-request>\n`;
+      xml += `      <evidence-request><![CDATA[${cdataSafe(JSON.stringify(v.evidenceRequest))}]]></evidence-request>\n`;
     }
     if (v.evidenceResponse) {
-      xml += `      <evidence-response><![CDATA[${JSON.stringify(v.evidenceResponse)}]]></evidence-response>\n`;
+      xml += `      <evidence-response><![CDATA[${cdataSafe(JSON.stringify(v.evidenceResponse))}]]></evidence-response>\n`;
     }
     if (v.detectionMethod) xml += `      <detection-method>${esc(v.detectionMethod)}</detection-method>\n`;
     if (v.references && v.references.length) {
