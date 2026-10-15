@@ -483,15 +483,30 @@ git commit -m "feat(extension): map scan profile to backend payload depth tier"
 **Interfaces:**
 - Consumes: aucune nouvelle interface — ce sont des données, pas du code.
 
-- [ ] **Step 1: Tagger toutes les entrées existantes par palier**
+- [ ] **Step 1: Corriger une régression de fidélité trouvée pendant la Task 2 (OBLIGATOIRE, avant tout tagging/enrichissement)**
+
+Task 2 (branchement de `sqli.py`) a révélé que `sqli.json`'s catégorie `time_based` a perdu en route, lors de sa création (Round 3, avant ce plan), des éléments présents dans l'ancien `TIME_PAYLOADS` codé en dur de `sqli.py` : le `'` de tête nécessaire pour sortir d'un paramètre en contexte string (`WHERE x='...'`) sur les variantes MSSQL/PostgreSQL, et une 4e variante PostgreSQL qui évite les requêtes empilées (utile quand le driver/framework cible les désactive). Corriger `sqli.json`'s catégorie `time_based` pour redevenir au moins aussi efficace que l'ancien `TIME_PAYLOADS` :
+
+```json
+"time_based": [
+  {"payload": "'; WAITFOR DELAY '0:0:5'-- ", "description": "MSSQL sleep 5s (contexte string)", "confidence_hint": 90, "dbms": "MSSQL"},
+  {"payload": "' OR SLEEP(5)-- ",             "description": "MySQL sleep 5s",                   "confidence_hint": 90, "dbms": "MySQL"},
+  {"payload": "'; SELECT pg_sleep(5)-- ",     "description": "PostgreSQL sleep (requête empilée)", "confidence_hint": 90, "dbms": "PostgreSQL"},
+  {"payload": "' OR 1=(SELECT 1 FROM PG_SLEEP(5))-- ", "description": "PostgreSQL sleep (sans requête empilée)", "confidence_hint": 85, "dbms": "PostgreSQL"}
+]
+```
+
+(différences avec l'actuel : `'` de tête ajouté sur MSSQL et PostgreSQL ; 4e entrée PostgreSQL restaurée. `sleep(5)` conservé tel quel — Task 2 l'a déjà adopté, pas de raison de revenir à 4s.)
+
+- [ ] **Step 2: Tagger toutes les entrées existantes par palier**
 
 Pour chacun des 4 fichiers, ajouter `"depth"` à chaque entrée existante selon l'heuristique de la spec §4.3 : erreurs simples / loopback / contextes HTML de base → `"basic"` ; variantes multiples ou légèrement intrusives (boolean_blind, UNION, schemes exotiques) → `"extended"` ; time-based et payloads lents/exotiques (gopher, dict, metadata cloud) → `"aggressive"`.
 
-- [ ] **Step 2: Rechercher et ajouter des payloads supplémentaires par catégorie**
+- [ ] **Step 3: Rechercher et ajouter des payloads supplémentaires par catégorie**
 
 Utiliser la recherche web (OWASP Testing Guide, PayloadsAllTheThings, SecLists) pour ajouter 2 à 5 payloads supplémentaires par catégorie existante, dans le même format que les entrées actuelles (`payload`, `description`, `confidence_hint`, `depth`, + champ spécifique à la famille — `dbms`/`signature`/rien). Ne pas copier de contenu propriétaire — uniquement des techniques génériques déjà publiées par ces références. Exemples de pistes (non exhaustif, à l'implémenteur de vérifier l'exactitude technique au moment de l'écrire) : variantes d'échappement SQLi par SGBD, contextes XSS supplémentaires (polyglots courts), variantes d'encodage LFI (URL-encoded, null byte historique), schémas SSRF additionnels (`ftp://`, IPv6 obfusqué, décimal/octal IP).
 
-- [ ] **Step 3: Écrire un test de non-régression de volume/forme**
+- [ ] **Step 4: Écrire un test de non-régression de volume/forme**
 
 ```python
 def test_enriched_catalogs_still_have_depth_and_payload_fields():
@@ -504,19 +519,31 @@ def test_enriched_catalogs_still_have_depth_and_payload_fields():
             # depth absent = basic (valide) ; si présent, doit être une valeur connue
             if "depth" in it:
                 assert it["depth"] in ("basic", "extended", "aggressive")
+
+
+def test_sqli_time_based_has_string_context_payloads_for_mssql_and_postgresql():
+    """Garde contre la régression trouvée en Task 2 : sans le ' de tête, ces
+    payloads ne sortent plus d'un paramètre en contexte string."""
+    from scanner.payloads import get_payloads
+    time_based = get_payloads("sqli", category="time_based")
+    mssql = [p["payload"] for p in time_based if p.get("dbms") == "MSSQL"]
+    postgres = [p["payload"] for p in time_based if p.get("dbms") == "PostgreSQL"]
+    assert any(p.startswith("'") for p in mssql)
+    assert any(p.startswith("'") for p in postgres)
+    assert len(postgres) >= 2  # la variante empilée ET la variante sans requête empilée
 ```
 
-- [ ] **Step 4: Lancer le test**
+- [ ] **Step 5: Lancer les tests**
 
-Run: `pytest backend/tests/test_payload_catalog.py::test_enriched_catalogs_still_have_depth_and_payload_fields -v`
-Expected: PASS
+Run: `pytest backend/tests/test_payload_catalog.py -v`
+Expected: PASS (y compris les 2 tests ci-dessus)
 
-- [ ] **Step 5: Lancer la suite complète pour vérifier qu'aucun module branché (Tasks 2-5) ne casse**
+- [ ] **Step 6: Lancer la suite complète pour vérifier qu'aucun module branché (Tasks 2-5) ne casse**
 
 Run: `pytest backend/tests/test_modules.py backend/tests/test_payload_catalog.py -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add backend/scanner/payloads/sqli.json backend/scanner/payloads/lfi.json backend/scanner/payloads/ssrf.json backend/scanner/payloads/xss.json backend/tests/test_payload_catalog.py
