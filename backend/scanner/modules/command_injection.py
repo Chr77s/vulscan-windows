@@ -17,6 +17,7 @@ import re
 
 from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
+from scanner.payloads import get_payloads
 
 
 class CommandInjectionModule(ScannerModule):
@@ -29,19 +30,11 @@ class CommandInjectionModule(ScannerModule):
     SUSPECT_PARAMS = {"cmd", "command", "exec", "run", "ping", "host", "domain",
                       "ip", "target", "address", "shell", "lookup"}
 
-    # Format : (payload, signature attendue)
-    PAYLOADS = [
-        ("; id",                  r"uid=\d+\(\w+\)"),
-        ("|id",                   r"uid=\d+\(\w+\)"),
-        ("&& id",                 r"uid=\d+\(\w+\)"),
-        ("`id`",                  r"uid=\d+\(\w+\)"),
-        ("$(id)",                 r"uid=\d+\(\w+\)"),
-        ("; uname -a",            r"Linux|Darwin"),
-        ("& whoami",              r"\\?\w+"),
-        ("| ipconfig",            r"Windows IP Configuration"),
-    ]
-
     def scan(self, target: str, context: Dict[str, Any]) -> List[Finding]:
+        payloads = [
+            (p["payload"], p.get("signature", ""))
+            for p in get_payloads("command_injection", depth=context.get("depth"))
+        ]
         if not re.match(r"^https?://", target):
             return []
         findings: List[Finding] = []
@@ -52,7 +45,7 @@ class CommandInjectionModule(ScannerModule):
             if param_name.lower() not in self.SUSPECT_PARAMS:
                 continue
 
-            for payload, sig in self.PAYLOADS:
+            for payload, sig in payloads:
                 try:
                     new_params = dict(params)
                     new_params[param_name] = base_value + payload

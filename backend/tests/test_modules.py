@@ -252,3 +252,15 @@ def test_xss_module_selects_catalog_payload_for_detected_context(mocker):
     assert findings, "aucun finding : la réflexion n'a pas été détectée, le catalogue n'a jamais été consulté"
     assert findings[0].payload == "SENTINEL_FROM_CATALOG"
     assert any(c.kwargs.get("category") == "html_context" for c in spy.call_args_list)
+
+
+def test_command_injection_uses_catalog(mocker):
+    from scanner.modules.command_injection import CommandInjectionModule
+    import scanner.modules.command_injection as ci_mod
+
+    spy = mocker.spy(ci_mod, "get_payloads")
+    fake = mocker.Mock(status_code=200, headers={}, text="no match")
+    mocker.patch("scanner.core.http.requests.request", return_value=fake)
+
+    CommandInjectionModule().scan("http://a?cmd=ls", {})
+    assert spy.call_args_list, "get_payloads n'a jamais été appelé"

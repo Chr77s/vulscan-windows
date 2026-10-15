@@ -1,0 +1,18 @@
+{
+  "family": "command_injection",
+  "version": "1.0.0",
+  "categories": {
+    "separators": [
+      {"payload": "; id",       "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 90, "depth": "basic"},
+      {"payload": "|id",        "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 90, "depth": "basic"},
+      {"payload": "&& id",      "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 90, "depth": "basic"},
+      {"payload": "`id`",       "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 85, "depth": "extended"},
+      {"payload": "$(id)",      "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 85, "depth": "extended"}
+    ],
+    "recon": [
+      {"payload": "; uname -a", "signature": "Linux|Darwin", "confidence_hint": 80, "depth": "extended"},
+      {"payload": "& whoami",   "signature": "\\\\?\\w+",    "confidence_hint": 70, "depth": "extended"},
+      {"payload": "| ipconfig", "signature": "Windows IP Configuration", "confidence_hint": 80, "depth": "aggressive"}
+    ]
+  }
+}
