@@ -480,6 +480,11 @@ git commit -m "feat(extension): map scan profile to backend payload depth tier"
 - Modify: `backend/scanner/payloads/sqli.json`, `lfi.json`, `ssrf.json`, `xss.json`
 - Test: `backend/tests/test_payload_catalog.py`
 
+**Régressions de contenu trouvées pendant les Tasks 2 et 3 (toutes obligatoires à corriger au Step 1, avant tout tagging/enrichissement) :**
+- `sqli.json` §`time_based` (Task 2, voir ci-dessous).
+- `lfi.json` §`php_wrappers` : la signature `"PD9waHA|^\?php"` a un `^` qui ne matche jamais `<?php` réel (sans `re.MULTILINE`), et perd l'alternative `cGhwLw==` présente dans l'ancien code dur. Corriger en `"PD9waHA|\\?php|cGhwLw=="` (sans ancre).
+- `lfi.json` §`windows` : la signature `"\\[fonts\\]"` seule est plus étroite que l'ancien `\[fonts\]|\[extensions\]|\[mci extensions\]`. Corriger en `"\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]"` sur les 2 entrées windows.
+
 **Interfaces:**
 - Consumes: aucune nouvelle interface — ce sont des données, pas du code.
 
@@ -497,6 +502,10 @@ Task 2 (branchement de `sqli.py`) a révélé que `sqli.json`'s catégorie `time
 ```
 
 (différences avec l'actuel : `'` de tête ajouté sur MSSQL et PostgreSQL ; 4e entrée PostgreSQL restaurée. `sleep(5)` conservé tel quel — Task 2 l'a déjà adopté, pas de raison de revenir à 4s.)
+
+Task 3 (branchement de `lfi.py`) a révélé deux défauts du même genre dans `lfi.json` :
+- §`php_wrappers` : remplacer `"PD9waHA|^\?php"` par `"PD9waHA|\\?php|cGhwLw=="` (retire l'ancre `^` qui empêchait tout match réel, restaure l'alternative `cGhwLw==`).
+- §`windows` (les 2 entrées) : remplacer `"\\[fonts\\]"` par `"\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]"`.
 
 - [ ] **Step 2: Tagger toutes les entrées existantes par palier**
 
@@ -531,6 +540,25 @@ def test_sqli_time_based_has_string_context_payloads_for_mssql_and_postgresql():
     assert any(p.startswith("'") for p in mssql)
     assert any(p.startswith("'") for p in postgres)
     assert len(postgres) >= 2  # la variante empilée ET la variante sans requête empilée
+
+
+def test_lfi_php_wrapper_signature_matches_real_php_source():
+    """Garde contre la régression trouvée en Task 3 : l'ancre ^ empêchait tout
+    match réel contre du code PHP commençant par <?php."""
+    import re
+    from scanner.payloads import get_payloads
+    php_entries = get_payloads("lfi", category="php_wrappers")
+    sig = next(p["signature"] for p in php_entries if "PD9waHA" in p.get("signature", ""))
+    assert re.search(sig, "<?php echo 1; ?>")
+
+
+def test_lfi_windows_signature_has_all_three_alternatives():
+    """Garde contre la régression trouvée en Task 3 : la signature windows
+    avait perdu 2 des 3 alternatives de l'ancien code dur."""
+    from scanner.payloads import get_payloads
+    windows_entries = get_payloads("lfi", category="windows")
+    for p in windows_entries:
+        assert "extensions" in p["signature"] and "mci extensions" in p["signature"]
 ```
 
 - [ ] **Step 5: Lancer les tests**
