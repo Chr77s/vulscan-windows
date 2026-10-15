@@ -306,6 +306,12 @@ const SCAN_PROFILES = {
   ],
 };
 
+// Palier de profondeur de payloads par profil (backend, découplé des 5 profils).
+const DEPTH_FOR_PROFILE = {
+  quick: "basic", standard: "extended", deep: "aggressive",
+  owasp: "aggressive", api: "extended",
+};
+
 // Mapping des 5 anciennes cases "Tests actifs" (Options) vers des noms de module.
 const CONFIG_TO_MODULES = {
   testSQLi:          "sqli",
@@ -367,7 +373,11 @@ async function runActiveModules(cfg, url) {
       body: JSON.stringify({
         target: url,
         enabled,
-        context: { ...(auth ? { auth } : {}), rate_limit_per_sec: cfg.requestsPerSecond },
+        context: {
+          ...(auth ? { auth } : {}),
+          rate_limit_per_sec: cfg.requestsPerSecond,
+          depth: DEPTH_FOR_PROFILE[cfg.scanProfile] || "extended",
+        },
       }),
       signal: AbortSignal.timeout(60000),  // 60s — les tests actifs peuvent être longs
     });
