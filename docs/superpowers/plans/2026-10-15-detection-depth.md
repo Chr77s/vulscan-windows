@@ -141,7 +141,8 @@ git commit -m "feat(payloads): add cumulative depth filtering to get_payloads()"
 - Test: `backend/tests/test_modules.py`
 
 **Interfaces:**
-- Consumes: `get_payloads("sqli", category="time_based", depth=...)` → entrées `{"payload", "description", "confidence_hint", "dbms", "category"}` ; `get_payloads("sqli", category="boolean_blind", depth=...)` → entrées `{"payload", "description", "confidence_hint", "expects", "category"}`.
+- Consumes: `get_payloads("sqli", category="time_based", depth=...)` → entrées `{"payload", "description", "confidence_hint", "dbms", "category"}`.
+- Hors scope de cette tâche (bonus optionnel noté dans la spec §4.2, non implémenté ici) : le test booléen inline pourrait aussi consommer `category="boolean_blind"` — ce n'est PAS requis par les Steps ci-dessous, ne pas l'ajouter sans qu'un Step le demande explicitement.
 
 - [ ] **Step 1: Écrire le test**
 
