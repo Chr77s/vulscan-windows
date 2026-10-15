@@ -225,16 +225,30 @@ def test_xss_json_has_svg_and_img_context():
     assert get_payloads("xss", category="img_context")
 
 
-def test_xss_module_uses_catalog_for_all_contexts(mocker):
+def test_xss_module_selects_catalog_payload_for_detected_context(mocker):
     from scanner.modules.xss import XssModule
     import scanner.modules.xss as xss_mod
+    from scanner.payloads import get_payloads as real_get_payloads
+    from urllib.parse import urlparse, parse_qs
 
-    spy = mocker.spy(xss_mod, "get_payloads")
-    marker_body = mocker.Mock(status_code=200, headers={}, text="<div>MARKERHERE</div>")
+    # Payload sentinelle : s'il sort du finding, il vient forcément du catalogue.
+    # Une table en dur donnerait "<script>alert(1)</script>" et ferait échouer le test.
+    def fake_payloads(family, category=None, depth=None):
+        if category == "html_context":
+            return [{"payload": "SENTINEL_FROM_CATALOG", "category": category}]
+        return real_get_payloads(family, category=category, depth=depth)
 
-    def fake_get(url, context, **kw):
-        return marker_body, {}, {}
-    mocker.patch("scanner.core.http.get", side_effect=lambda *a, **k: marker_body)
+    spy = mocker.patch.object(xss_mod, "get_payloads", side_effect=fake_payloads)
 
-    XssModule().scan("http://a?q=test", {})
-    assert spy.call_args_list, "get_payloads n'a jamais été appelé — PAYLOAD_CATALOG en dur toujours utilisé ?"
+    def fake_get(url, context, **kwargs):
+        # Le module génère son marqueur par requête : on le relit dans l'URL et on le réfléchit.
+        marker = parse_qs(urlparse(url).query)["q"][0]
+        resp = mocker.Mock(status_code=200, headers={}, text=f"<div>{marker}</div>")
+        return resp, {}, {}
+    mocker.patch("scanner.core.http.get", side_effect=fake_get)
+
+    findings = XssModule().scan("http://a?q=test", {})
+
+    assert findings, "aucun finding : la réflexion n'a pas été détectée, le catalogue n'a jamais été consulté"
+    assert findings[0].payload == "SENTINEL_FROM_CATALOG"
+    assert any(c.kwargs.get("category") == "html_context" for c in spy.call_args_list)
