@@ -22,6 +22,7 @@ import time
 from scanner.core import http
 from scanner.core.matchers import HttpResult, Matcher, evaluate
 from scanner.core.module_base import ScannerModule, Finding
+from scanner.payloads import get_payloads
 
 
 class SqliModule(ScannerModule):
@@ -46,13 +47,6 @@ class SqliModule(ScannerModule):
                       "cat", "search", "q", "query", "name", "username",
                       "email", "order", "sort", "type"}
 
-    # Payloads time-based : (payload, dbms, sleep_seconds)
-    TIME_PAYLOADS = [
-        ("' AND SLEEP(4)-- ",                       "MySQL",      4),
-        ("'; SELECT pg_sleep(4)-- ",                "PostgreSQL", 4),
-        ("'; WAITFOR DELAY '0:0:4'-- ",             "MSSQL",      4),
-        ("' OR 1=(SELECT 1 FROM PG_SLEEP(4))-- ",   "PostgreSQL", 4),
-    ]
     # Seuil : on confirme si le delta de temps est ≥ 3.5s (marge pour latence)
     TIME_THRESHOLD = 3.5
 
@@ -90,6 +84,10 @@ class SqliModule(ScannerModule):
                 break  # une seule détection par DBMS suffit
 
         # 2. Blind SQLi booléen + time-based sur chaque paramètre suspect
+        time_payloads = [
+            (p["payload"], p.get("dbms", "?"), 5)
+            for p in get_payloads("sqli", category="time_based", depth=context.get("depth"))
+        ]
         for param_name, base_value in params.items():
             if param_name.lower() not in self.SUSPECT_PARAMS:
                 continue
@@ -137,7 +135,7 @@ class SqliModule(ScannerModule):
                 base_time_2, _ = base_2
                 baseline = max(base_time_1, base_time_2)
 
-                for payload, dbms, sleep_s in self.TIME_PAYLOADS:
+                for payload, dbms, sleep_s in time_payloads:
                     full_payload = f"{base_value}{payload}"
                     timed = self._timed_fetch(parsed, params, param_name, full_payload, context)
                     if timed is None:

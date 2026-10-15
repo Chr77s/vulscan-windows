@@ -154,6 +154,21 @@ def test_sqli_time_based_does_not_false_positive_on_network_jitter(mocker):
     assert not [f for f in findings if "time-based" in (f.title or "").lower()]
 
 
+def test_sqli_time_based_uses_catalog_payloads(mocker):
+    """Le module doit consommer get_payloads('sqli', 'time_based'), pas sa constante en dur."""
+    from scanner.modules.sqli import SqliModule
+    import scanner.modules.sqli as sqli_mod
+
+    spy = mocker.spy(sqli_mod, "get_payloads")
+    fake = mocker.Mock(status_code=200, headers={}, text="no error here")
+    mocker.patch("scanner.core.http.requests.request", return_value=fake)
+
+    SqliModule().scan("http://a?id=1", {})
+
+    calls = [c for c in spy.call_args_list if c.args and c.args[0] == "sqli"]
+    assert any(c.kwargs.get("category") == "time_based" or (len(c.args) > 1 and c.args[1] == "time_based") for c in calls)
+
+
 def test_xss_reflection_uses_matcher_and_captures_evidence(mocker):
     from scanner.modules.xss import XssModule
     import scanner.modules.xss as xss_mod
