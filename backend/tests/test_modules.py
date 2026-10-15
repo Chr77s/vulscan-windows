@@ -202,3 +202,18 @@ def test_lfi_uses_catalog_payloads_and_keeps_signature_field(mocker):
     findings = LfiModule().scan("http://a?file=x", {})
 
     assert any(f.type == "path-traversal" and "../../../../etc/passwd" in f.payload for f in findings)
+
+
+def test_ssrf_uses_catalog_payloads(mocker):
+    from scanner.modules.ssrf import SsrfModule
+    import scanner.modules.ssrf as ssrf_mod
+
+    spy = mocker.spy(ssrf_mod, "get_payloads")
+    baseline = mocker.Mock(status_code=200, headers={}, text="baseline body")
+    mocker.patch("scanner.core.http.requests.request", return_value=baseline)
+    mocker.patch("scanner.core.oob.OOBCanary.wait_for_hit", return_value=False)
+
+    SsrfModule().scan("http://a?url=http://x", {})
+
+    assert spy.call_args_list, "get_payloads n'a jamais été appelé — PAYLOADS en dur toujours utilisé ?"
+    assert any(c.args and c.args[0] == "ssrf" for c in spy.call_args_list)

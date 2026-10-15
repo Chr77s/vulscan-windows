@@ -19,6 +19,7 @@ import re
 from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 from scanner.core.oob import OOBCanary
+from scanner.payloads import get_payloads
 
 
 class SsrfModule(ScannerModule):
@@ -31,14 +32,6 @@ class SsrfModule(ScannerModule):
     URL_LIKE_PARAMS = {"url", "uri", "src", "source", "target", "dest", "redirect",
                        "proxy", "fetch", "callback", "webhook", "endpoint", "host"}
 
-    PAYLOADS = [
-        ("http://127.0.0.1:80",        "loopback HTTP"),
-        ("http://localhost:80",        "loopback DNS"),
-        ("http://169.254.169.254/latest/meta-data/", "AWS metadata"),
-        ("file:///etc/hostname",       "file:// scheme"),
-        ("gopher://127.0.0.1:25/",     "gopher exotic scheme"),
-    ]
-
     ERROR_SIGNATURES = [
         re.compile(r"connection refused", re.I),
         re.compile(r"getaddrinfo failed", re.I),
@@ -47,6 +40,10 @@ class SsrfModule(ScannerModule):
     ]
 
     def scan(self, target: str, context: Dict[str, Any]) -> List[Finding]:
+        payloads = [
+            (p["payload"], p.get("description", "?"))
+            for p in get_payloads("ssrf", depth=context.get("depth"))
+        ]
         if not re.match(r"^https?://", target):
             return []
         findings: List[Finding] = []
@@ -107,7 +104,7 @@ class SsrfModule(ScannerModule):
             if not (looks_url_like or base_is_url):
                 continue
 
-            for payload, label in self.PAYLOADS:
+            for payload, label in payloads:
                 try:
                     new_params = dict(params)
                     new_params[param_name] = payload
