@@ -53,15 +53,22 @@ class PayloadCatalog:
         return sorted(out)
 
 
-def get_payloads(family: str, category: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Retourne les payloads d'une famille (et optionnellement d'une catégorie)."""
+_DEPTH_ORDER = {"basic": 0, "extended": 1, "aggressive": 2}
+
+
+def get_payloads(family: str, category: Optional[str] = None, depth: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retourne les payloads d'une famille (et optionnellement d'une catégorie),
+    filtrés de façon cumulative par palier de profondeur si `depth` est fourni."""
     data = PayloadCatalog.load(family)
     categories = data.get("categories", {})
     if category:
-        return list(categories.get(category, []))
-    # Sinon, on aplatit toutes les catégories
-    out = []
-    for cat_name, items in categories.items():
-        for item in items:
-            out.append({**item, "category": cat_name})
-    return out
+        items = [{**item, "category": category} for item in categories.get(category, [])]
+    else:
+        items = []
+        for cat_name, cat_items in categories.items():
+            for item in cat_items:
+                items.append({**item, "category": cat_name})
+    if depth is None:
+        return items
+    max_rank = _DEPTH_ORDER.get(depth, _DEPTH_ORDER["aggressive"])
+    return [it for it in items if _DEPTH_ORDER.get(it.get("depth", "basic"), 0) <= max_rank]
