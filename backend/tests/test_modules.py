@@ -217,3 +217,24 @@ def test_ssrf_uses_catalog_payloads(mocker):
 
     assert spy.call_args_list, "get_payloads n'a jamais été appelé — PAYLOADS en dur toujours utilisé ?"
     assert any(c.args and c.args[0] == "ssrf" for c in spy.call_args_list)
+
+
+def test_xss_json_has_svg_and_img_context():
+    from scanner.payloads import get_payloads
+    assert get_payloads("xss", category="svg_context")
+    assert get_payloads("xss", category="img_context")
+
+
+def test_xss_module_uses_catalog_for_all_contexts(mocker):
+    from scanner.modules.xss import XssModule
+    import scanner.modules.xss as xss_mod
+
+    spy = mocker.spy(xss_mod, "get_payloads")
+    marker_body = mocker.Mock(status_code=200, headers={}, text="<div>MARKERHERE</div>")
+
+    def fake_get(url, context, **kw):
+        return marker_body, {}, {}
+    mocker.patch("scanner.core.http.get", side_effect=lambda *a, **k: marker_body)
+
+    XssModule().scan("http://a?q=test", {})
+    assert spy.call_args_list, "get_payloads n'a jamais été appelé — PAYLOAD_CATALOG en dur toujours utilisé ?"

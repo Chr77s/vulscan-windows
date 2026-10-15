@@ -19,6 +19,7 @@ import re
 from scanner.core import http
 from scanner.core.matchers import HttpResult, Matcher, evaluate
 from scanner.core.module_base import ScannerModule, Finding
+from scanner.payloads import get_payloads
 
 
 class XssModule(ScannerModule):
@@ -28,14 +29,15 @@ class XssModule(ScannerModule):
     description = "Détecte les paramètres GET réfléchis dans la réponse — base d'une XSS reflétée."
     default_enabled = False  # Module actif
 
-    PAYLOAD_CATALOG = {
-        "html_context":      "<script>alert(1)</script>",
-        "attribute_context": '" onmouseover="alert(1)',
-        "js_context":        "';alert(1);//",
-        "url_context":       "javascript:alert(1)",
-        "svg_context":       "<svg onload=alert(1)>",
-        "img_context":       '<img src=x onerror=alert(1)>',
-    }
+    _CONTEXTS = ("html_context", "attribute_context", "js_context", "url_context", "svg_context", "img_context")
+
+    def _payload_catalog(self, depth):
+        out = {}
+        for ctx in self._CONTEXTS:
+            items = get_payloads("xss", category=ctx, depth=depth)
+            if items:
+                out[ctx] = items[0]["payload"]
+        return out
 
     def scan(self, target: str, context: Dict[str, Any]) -> List[Finding]:
         if not re.match(r"^https?://", target):
@@ -46,6 +48,7 @@ class XssModule(ScannerModule):
         if not params:
             return []
 
+        catalog = self._payload_catalog(context.get("depth"))
         for param_name, base_value in params.items():
             marker = "vsx" + secrets.token_hex(4)  # marqueur unique
             test_params = dict(params)
@@ -67,7 +70,7 @@ class XssModule(ScannerModule):
 
             # Détecter le contexte du reflet
             contexts = self._detect_contexts(body, marker)
-            payloads = [self.PAYLOAD_CATALOG[c] for c in contexts if c in self.PAYLOAD_CATALOG]
+            payloads = [catalog[c] for c in contexts if c in catalog]
 
             findings.append(Finding(
                 type="xss", severity="high",
@@ -82,7 +85,7 @@ class XssModule(ScannerModule):
                     "Mettre en place une CSP stricte. Côté serveur : DOMPurify, htmlspecialchars(), etc."
                 ),
                 url=target, parameter=param_name,
-                payload=payloads[0] if payloads else self.PAYLOAD_CATALOG["html_context"],
+                payload=payloads[0] if payloads else catalog.get("html_context", "<script>alert(1)</script>"),
                 evidence=self._extract_context(body, marker),
                 confidence=85,
                 cwe_id="CWE-79", owasp_id="A03:2021",
