@@ -190,3 +190,15 @@ def test_xss_reflection_uses_matcher_and_captures_evidence(mocker):
     assert findings
     assert findings[0].evidence_request is not None
     assert findings[0].evidence_response is not None
+
+
+def test_lfi_uses_catalog_payloads_and_keeps_signature_field(mocker):
+    """Le module doit lire payload+signature du catalogue, pas de PAYLOADS en dur."""
+    from scanner.modules.lfi import LfiModule
+    baseline = mocker.Mock(status_code=200, headers={}, text="nothing interesting")
+    confirming = mocker.Mock(status_code=200, headers={}, text="root:x:0:0:root:/root:/bin/bash")
+    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [confirming] * 20)
+
+    findings = LfiModule().scan("http://a?file=x", {})
+
+    assert any(f.type == "path-traversal" and "../../../../etc/passwd" in f.payload for f in findings)

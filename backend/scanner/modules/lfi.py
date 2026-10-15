@@ -16,6 +16,7 @@ import re
 
 from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
+from scanner.payloads import get_payloads
 
 
 class LfiModule(ScannerModule):
@@ -28,16 +29,6 @@ class LfiModule(ScannerModule):
     SUSPECT_PARAMS = {"file", "page", "path", "include", "filename", "doc",
                       "view", "template", "module", "dir", "load", "read"}
 
-    # (payload, signature attendue dans la réponse, OS)
-    PAYLOADS = [
-        ("../../../../etc/passwd",            r"root:[x*]:0:0", "linux"),
-        ("../../../../../../etc/passwd",      r"root:[x*]:0:0", "linux"),
-        ("..\\..\\..\\..\\windows\\win.ini",  r"\[fonts\]|\[extensions\]|\[mci extensions\]", "windows"),
-        ("../../../../../../windows/win.ini", r"\[fonts\]|\[extensions\]|\[mci extensions\]", "windows"),
-        ("php://filter/convert.base64-encode/resource=index",  r"PD9waHA|\?php|cGhwLw==", "php"),
-        ("/etc/passwd",                       r"root:[x*]:0:0", "linux-abs"),
-    ]
-
     SIGNATURES_GENERIC = [
         (re.compile(r"root:[x*]:0:0", re.I),         "Fichier /etc/passwd"),
         (re.compile(r"\[fonts\]\s*\[extensions\]", re.I), "Fichier C:\\Windows\\win.ini"),
@@ -47,6 +38,10 @@ class LfiModule(ScannerModule):
     ]
 
     def scan(self, target: str, context: Dict[str, Any]) -> List[Finding]:
+        payloads = [
+            (p["payload"], p.get("signature", ""), p.get("category", "?"))
+            for p in get_payloads("lfi", depth=context.get("depth"))
+        ]
         if not re.match(r"^https?://", target):
             return []
         findings: List[Finding] = []
@@ -82,7 +77,10 @@ class LfiModule(ScannerModule):
             if param_name.lower() not in self.SUSPECT_PARAMS:
                 continue
 
-            for payload, sig_pattern, os_label in self.PAYLOADS:
+            for payload, sig_pattern, os_label in payloads:
+                # signature vide (php://input) : re.search("", ...) matcherait toujours
+                if not sig_pattern:
+                    continue
                 try:
                     new_params = dict(params)
                     new_params[param_name] = payload
