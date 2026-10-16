@@ -23,6 +23,7 @@ import re
 
 from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
+from scanner.payloads import get_payloads
 
 
 class FormFuzzerModule(ScannerModule):
@@ -71,12 +72,21 @@ class FormFuzzerModule(ScannerModule):
         if not safe_forms:
             return []
 
+        payload_defs = self._build_payload_defs(context.get("depth"))
         findings: List[Finding] = []
         for form in safe_forms:
-            findings.extend(self._fuzz_form(form, context))
+            findings.extend(self._fuzz_form(form, context, payload_defs))
         return findings
 
-    def _fuzz_form(self, form: Dict[str, Any], context: Dict[str, Any]) -> List[Finding]:
+    def _build_payload_defs(self, depth):
+        extra = []
+        for p in get_payloads("sqli", category="error_based", depth=depth):
+            extra.append({"value": p["payload"], "type": "sqli", "signature_in_response": None, "expects_error": True})
+        for p in get_payloads("lfi", category="linux", depth=depth):
+            extra.append({"value": p["payload"], "type": "lfi", "signature_in_response": p.get("signature", "root:[x*]:0:0")})
+        return self.PAYLOADS + extra
+
+    def _fuzz_form(self, form: Dict[str, Any], context: Dict[str, Any], payload_defs: List[Dict[str, Any]]) -> List[Finding]:
         findings: List[Finding] = []
         action = form["action"]
         method = form["method"]
@@ -99,7 +109,7 @@ class FormFuzzerModule(ScannerModule):
             return []
 
         for field in target_fields:
-            for payload_def in self.PAYLOADS:
+            for payload_def in payload_defs:
                 mark = secrets.token_hex(3)  # marqueur unique pour ce test
                 payload_str = payload_def["value"].replace("{MARK}", mark)
 

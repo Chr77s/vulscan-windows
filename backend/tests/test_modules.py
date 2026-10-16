@@ -310,3 +310,18 @@ def test_json_fuzzer_pulls_extra_sqli_and_lfi_payloads(mocker):
     JsonFuzzerModule().scan("http://a/api/x", {"crawled": {"api_endpoints": ["http://a/api/x"]}})
     families_called = {c.args[0] for c in spy.call_args_list if c.args}
     assert families_called >= {"sqli", "lfi"}
+
+
+def test_form_fuzzer_pulls_extra_sqli_and_lfi_payloads(mocker):
+    from scanner.modules.form_fuzzer import FormFuzzerModule
+    import scanner.modules.form_fuzzer as ff_mod
+
+    spy = mocker.spy(ff_mod, "get_payloads")
+    mocker.patch("scanner.core.http.post", return_value=mocker.Mock(text="ok"))
+    mocker.patch("scanner.core.http.get", return_value=mocker.Mock(text="ok"))
+
+    form = {"action": "http://a/submit", "method": "POST",
+            "fields": [{"name": "comment", "type": "text", "value": ""}]}
+    FormFuzzerModule().scan("http://a", {"crawled": {"forms": [form]}})
+    families_called = {c.args[0] for c in spy.call_args_list if c.args}
+    assert families_called >= {"sqli", "lfi"}
