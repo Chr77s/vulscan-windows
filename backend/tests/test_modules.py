@@ -297,3 +297,16 @@ def test_header_injection_uses_catalog(mocker):
 
     HeaderInjectionModule().scan("http://a", {})
     assert spy.call_args_list, "get_payloads n'a jamais été appelé"
+
+
+def test_json_fuzzer_pulls_extra_sqli_and_lfi_payloads(mocker):
+    from scanner.modules.json_fuzzer import JsonFuzzerModule
+    import scanner.modules.json_fuzzer as jf_mod
+
+    spy = mocker.spy(jf_mod, "get_payloads")
+    r_base = mocker.Mock(status_code=200, text="{}")
+    mocker.patch("scanner.core.http.requests.request", return_value=r_base)
+
+    JsonFuzzerModule().scan("http://a/api/x", {"crawled": {"api_endpoints": ["http://a/api/x"]}})
+    families_called = {c.args[0] for c in spy.call_args_list if c.args}
+    assert families_called >= {"sqli", "lfi"}

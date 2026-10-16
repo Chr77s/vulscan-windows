@@ -21,6 +21,7 @@ import re
 
 from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
+from scanner.payloads import get_payloads
 
 
 class JsonFuzzerModule(ScannerModule):
@@ -53,10 +54,19 @@ class JsonFuzzerModule(ScannerModule):
         if not endpoints:
             return []
 
+        payload_defs = self._build_payload_defs(context.get("depth"))
         findings: List[Finding] = []
         for ep in endpoints[:self.MAX_ENDPOINTS]:
-            findings.extend(self._fuzz_endpoint(ep, context))
+            findings.extend(self._fuzz_endpoint(ep, context, payload_defs))
         return findings
+
+    def _build_payload_defs(self, depth):
+        extra = []
+        for p in get_payloads("sqli", category="error_based", depth=depth):
+            extra.append({"value": p["payload"], "type": "sqli"})
+        for p in get_payloads("lfi", category="linux", depth=depth):
+            extra.append({"value": p["payload"], "type": "lfi", "key_signal": p.get("signature", "root:[x*]:0:0")})
+        return self.PAYLOADS + extra
 
     def _find_api_endpoints(self, target: str, context: Dict[str, Any]) -> List[str]:
         urls = set()
@@ -72,7 +82,7 @@ class JsonFuzzerModule(ScannerModule):
                 urls.add(u)
         return sorted(urls)
 
-    def _fuzz_endpoint(self, url: str, context: Dict[str, Any]) -> List[Finding]:
+    def _fuzz_endpoint(self, url: str, context: Dict[str, Any], payload_defs: List[Dict[str, Any]]) -> List[Finding]:
         findings: List[Finding] = []
 
         # Baseline JSON minimal — on tente avec un payload neutre pour voir si l'API accepte
@@ -88,7 +98,7 @@ class JsonFuzzerModule(ScannerModule):
         body_base = r_base.text
 
         for key in baseline_body.keys():
-            for payload_def in self.PAYLOADS:
+            for payload_def in payload_defs:
                 mark = secrets.token_hex(3)
                 val = payload_def["value"]
                 if isinstance(val, str):
