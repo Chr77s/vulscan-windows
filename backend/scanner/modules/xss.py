@@ -36,6 +36,8 @@ class XssModule(ScannerModule):
         for ctx in self._CONTEXTS:
             items = get_payloads("xss", category=ctx, depth=depth)
             if items:
+                # Seule l'entrée basic (la 1re) est utilisée : les entrées extended/aggressive
+                # de xss.json ne sont jamais envoyées, quelle que soit la valeur de `depth`.
                 out[ctx] = items[0]["payload"]
         return out
 
