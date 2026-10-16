@@ -285,3 +285,15 @@ def test_xxe_still_detects_file_scheme_reflection(mocker):
 
     findings = XxeModule().scan("http://a/api.xml", {})
     assert any(f.type == "xxe" and f.severity == "critical" for f in findings)
+
+
+def test_header_injection_uses_catalog(mocker):
+    from scanner.modules.header_injection import HeaderInjectionModule
+    import scanner.modules.header_injection as hi_mod
+
+    spy = mocker.spy(hi_mod, "get_payloads")
+    fake = mocker.Mock(status_code=200, headers={}, text="")
+    mocker.patch("scanner.core.http.requests.request", return_value=fake)
+
+    HeaderInjectionModule().scan("http://a", {})
+    assert spy.call_args_list, "get_payloads n'a jamais été appelé"

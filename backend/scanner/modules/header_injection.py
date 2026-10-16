@@ -20,6 +20,7 @@ import re
 
 from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
+from scanner.payloads import get_payloads
 
 
 class HeaderInjectionModule(ScannerModule):
@@ -72,7 +73,7 @@ class HeaderInjectionModule(ScannerModule):
         mark = "vsh" + secrets.token_hex(3)
 
         # Catalogue de payloads adapté à chaque header
-        payloads = self._payloads_for(header_name, mark)
+        payloads = self._payloads_for(header_name, mark, context.get("depth"))
 
         for p_value, p_type, p_desc in payloads:
             headers = {"User-Agent": "VulnScan/1.3"}
@@ -181,27 +182,14 @@ class HeaderInjectionModule(ScannerModule):
         return findings
 
     @staticmethod
-    def _payloads_for(header_name: str, mark: str):
-        """Renvoie les payloads adaptés à chaque header."""
-        base = {
-            "User-Agent": [
-                (f"Mozilla/5.0 <svg onload={mark}>", "xss", "XSS via UA"),
-                ("Mozilla/5.0 ' OR 1=1-- ",         "sqli", "SQLi via UA loggé"),
-                ("Mozilla/5.0\r\nX-Injected: yes",  "crlf", "CRLF"),
-            ],
-            "Referer": [
-                (f"https://evil.com/<svg onload={mark}>", "xss", "XSS via referer"),
-                ("https://evil.example.com",              "host-injection", "Referer canary"),
-            ],
-            "X-Forwarded-For": [
-                ("127.0.0.1' OR 1=1-- ",   "sqli", "SQLi via IP loggée"),
-                (f"<svg onload={mark}>",   "xss",  "XSS via IP affichée"),
-            ],
-            "Host": [
-                ("evil.example.com",       "host-injection", "Host canary"),
-            ],
-            "Cookie": [
-                ("admin=true",             "privesc", "Privesc via cookie"),
-            ],
-        }
-        return base.get(header_name, [])
+    def _payloads_for(header_name: str, mark: str, depth=None):
+        category = header_name.lower().replace("-", "_")
+        out = []
+        for p in get_payloads("header_injection", category=category, depth=depth):
+            value = p["payload"].replace("{MARK}", mark) if "{MARK}" in p["payload"] else p["payload"]
+            # Les payloads XSS statiques n'ont pas de marqueur dans le JSON — en ajouter un
+            # pour garder la détection fiable par reflet (comme avant ce refactor).
+            if p["type"] == "xss" and mark not in value:
+                value = value.replace("alert(1)", f"alert({mark})")
+            out.append((value, p["type"], p.get("description", "")))
+        return out

