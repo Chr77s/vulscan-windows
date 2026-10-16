@@ -60,3 +60,15 @@ def test_ssti_fetches_baseline_exactly_once_regardless_of_probe_count(mocker):
 def test_ssti_skips_target_with_no_params():
     from scanner.modules.ssti import SstiModule
     assert SstiModule().scan("http://example.com/", {}) == []
+
+
+def test_ssti_uses_catalog_payloads(mocker):
+    from scanner.modules.ssti import SstiModule
+    import scanner.modules.ssti as ssti_mod
+
+    spy = mocker.spy(ssti_mod, "get_payloads")
+    baseline = mocker.Mock(status_code=200, headers={}, text="baseline")
+    mocker.patch("scanner.core.http.requests.request", return_value=baseline)
+
+    SstiModule().scan("http://a?q=x", {})
+    assert spy.call_args_list, "get_payloads n'a jamais été appelé"

@@ -5,6 +5,7 @@ import re
 
 from scanner.core.module_base import ScannerModule, Finding
 from scanner.core import http
+from scanner.payloads import get_payloads
 
 
 class SstiModule(ScannerModule):
@@ -17,17 +18,14 @@ class SstiModule(ScannerModule):
     SUSPECT_PARAMS = {"name", "search", "q", "query", "page", "template", "view",
                       "title", "message", "comment", "text", "content"}
 
-    # 1337*7331 plutôt que 7*7 : "49" apparaît trop souvent par coïncidence (prix "$49.99",
-    # jeton CSRF, âge affiché...) — mesuré à 36% de faux positifs en revue. Un produit à
-    # 7 chiffres ("9801547") a une probabilité de collision fortuite négligeable.
-    PROBES = [
-        ("{{1337*7331}}", "Jinja2/Twig", "9801547"),
-        ("${1337*7331}",  "Freemarker/Velocity", "9801547"),
-        ("#{1337*7331}",  "Thymeleaf (SpEL)", "9801547"),
-        ("*{1337*7331}",  "Thymeleaf (alt)", "9801547"),
-    ]
-
     def scan(self, target: str, context: Dict[str, Any]) -> List[Finding]:
+        # 1337*7331 plutôt que 7*7 : "49" apparaît trop souvent par coïncidence (prix "$49.99",
+        # jeton CSRF, âge affiché...) — mesuré à 36% de faux positifs en revue. Un produit à
+        # 7 chiffres ("9801547") a une probabilité de collision fortuite négligeable.
+        probes = [
+            (p["payload"], p.get("engine", "?"), p.get("expected", ""))
+            for p in get_payloads("ssti", depth=context.get("depth"))
+        ]
         if not re.match(r"^https?://", target):
             return []
         parsed = urlparse(target)
@@ -44,7 +42,7 @@ class SstiModule(ScannerModule):
         for param_name, base_value in params.items():
             if param_name.lower() not in self.SUSPECT_PARAMS:
                 continue
-            for payload, engine, expected in self.PROBES:
+            for payload, engine, expected in probes:
                 new_params = dict(params)
                 new_params[param_name] = payload
                 test_url = urlunparse(parsed._replace(query=urlencode(new_params)))

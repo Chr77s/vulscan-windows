@@ -1,0 +1,12 @@
+{
+  "family": "ssti",
+  "version": "1.0.0",
+  "categories": {
+    "arithmetic_probe": [
+      {"payload": "{{1337*7331}}", "engine": "Jinja2/Twig",          "expected": "9801547", "confidence_hint": 90, "depth": "basic"},
+      {"payload": "${1337*7331}",  "engine": "Freemarker/Velocity",  "expected": "9801547", "confidence_hint": 90, "depth": "basic"},
+      {"payload": "#{1337*7331}",  "engine": "Thymeleaf (SpEL)",     "expected": "9801547", "confidence_hint": 85, "depth": "extended"},
+      {"payload": "*{1337*7331}",  "engine": "Thymeleaf (alt)",      "expected": "9801547", "confidence_hint": 85, "depth": "extended"}
+    ]
+  }
+}
