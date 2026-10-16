@@ -58,3 +58,15 @@ def test_nosqli_skips_endpoint_when_baseline_is_404(mocker):
 def test_nosqli_returns_empty_without_api_endpoints():
     from scanner.modules.nosqli import NoSqliModule
     assert NoSqliModule().scan("http://example.com/", {}) == []
+
+
+def test_nosqli_uses_catalog_payloads(mocker):
+    from scanner.modules.nosqli import NoSqliModule
+    import scanner.modules.nosqli as nosqli_mod
+
+    spy = mocker.spy(nosqli_mod, "get_payloads")
+    baseline = mocker.Mock(status_code=401, headers={}, text="")
+    mocker.patch("scanner.core.http.requests.request", return_value=baseline)
+
+    NoSqliModule().scan("http://a", {"crawled": {"api_endpoints": ["http://a/login"]}})
+    assert spy.call_args_list, "get_payloads n'a jamais été appelé"

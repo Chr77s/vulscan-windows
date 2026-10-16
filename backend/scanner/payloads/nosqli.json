@@ -1,0 +1,11 @@
+{
+  "family": "nosqli",
+  "version": "1.0.0",
+  "categories": {
+    "mongo_operators": [
+      {"payload": {"$gt": ""},   "confidence_hint": 85, "depth": "basic"},
+      {"payload": {"$ne": null}, "confidence_hint": 85, "depth": "basic"},
+      {"payload": "';return true;//", "confidence_hint": 70, "depth": "extended"}
+    ]
+  }
+}

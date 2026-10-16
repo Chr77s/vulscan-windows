@@ -5,6 +5,7 @@ import secrets
 
 from scanner.core.module_base import ScannerModule, Finding
 from scanner.core import http
+from scanner.payloads import get_payloads
 
 
 class NoSqliModule(ScannerModule):
@@ -16,16 +17,16 @@ class NoSqliModule(ScannerModule):
 
     MAX_ENDPOINTS = 5
     BODY_GROWTH_THRESHOLD = 1.2  # +20%
-    OPERATOR_PAYLOADS: List[Any] = [{"$gt": ""}, {"$ne": None}, "';return true;//"]
 
     def scan(self, target: str, context: Dict[str, Any]) -> List[Finding]:
         endpoints = (context.get("crawled") or {}).get("api_endpoints", [])[:self.MAX_ENDPOINTS]
+        operator_payloads = [p["payload"] for p in get_payloads("nosqli", depth=context.get("depth"))]
         findings: List[Finding] = []
         for url in endpoints:
-            findings.extend(self._test_endpoint(url, context))
+            findings.extend(self._test_endpoint(url, context, operator_payloads))
         return findings
 
-    def _test_endpoint(self, url: str, context: Dict[str, Any]) -> List[Finding]:
+    def _test_endpoint(self, url: str, context: Dict[str, Any], operator_payloads: List[Any]) -> List[Finding]:
         baseline_body = {"username": "vulnscan_probe", "password": "wrong_pw_" + secrets.token_hex(4)}
         r_base = http.post(url, context, json=baseline_body, timeout=8)
         if r_base is None or r_base.status_code in (404, 405, 415):
@@ -35,7 +36,7 @@ class NoSqliModule(ScannerModule):
 
         findings: List[Finding] = []
         for key in baseline_body.keys():
-            for payload in self.OPERATOR_PAYLOADS:
+            for payload in operator_payloads:
                 test_body = dict(baseline_body)
                 test_body[key] = payload
                 response, req_ev, resp_ev = http.post(url, context, json=test_body, capture=True, timeout=8)
