@@ -264,3 +264,24 @@ def test_command_injection_uses_catalog(mocker):
 
     CommandInjectionModule().scan("http://a?cmd=ls", {})
     assert spy.call_args_list, "get_payloads n'a jamais été appelé"
+
+
+def test_xxe_uses_catalog_payloads(mocker):
+    from scanner.modules.xxe import XxeModule
+    import scanner.modules.xxe as xxe_mod
+
+    spy = mocker.spy(xxe_mod, "get_payloads")
+    fake = mocker.Mock(status_code=200, headers={}, text="no doctype error here")
+    mocker.patch("scanner.core.http.requests.request", return_value=fake)
+
+    XxeModule().scan("http://a/api.xml", {})
+    assert spy.call_args_list, "get_payloads n'a jamais été appelé"
+
+
+def test_xxe_still_detects_file_scheme_reflection(mocker):
+    from scanner.modules.xxe import XxeModule
+    fake = mocker.Mock(status_code=200, headers={}, text="leaked: file:///etc/hostname contents here")
+    mocker.patch("scanner.core.http.requests.request", return_value=fake)
+
+    findings = XxeModule().scan("http://a/api.xml", {})
+    assert any(f.type == "xxe" and f.severity == "critical" for f in findings)
