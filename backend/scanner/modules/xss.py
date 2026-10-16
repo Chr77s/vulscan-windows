@@ -50,7 +50,8 @@ class XssModule(ScannerModule):
         if not params:
             return []
 
-        catalog = self._payload_catalog(context.get("depth"))
+        depth = context.get("depth")
+        catalog = self._payload_catalog(depth)
         for param_name, base_value in params.items():
             marker = "vsx" + secrets.token_hex(4)  # marqueur unique
             test_params = dict(params)
@@ -74,30 +75,77 @@ class XssModule(ScannerModule):
             contexts = self._detect_contexts(body, marker)
             payloads = [catalog[c] for c in contexts if c in catalog]
 
-            findings.append(Finding(
-                type="xss", severity="high",
-                title="Reflected XSS — Parameter Reflection",
-                description=(
-                    f"Le paramètre '{param_name}' est réfléchi tel quel dans la réponse "
-                    f"({len(contexts)} contexte(s) détecté(s) : {', '.join(contexts) or 'html'}). "
-                    "Un payload de script pourrait être exécuté."
-                ),
-                recommendation=(
-                    "Encoder la sortie selon le contexte (HTMLEntity, attribute, JS, URL). "
-                    "Mettre en place une CSP stricte. Côté serveur : DOMPurify, htmlspecialchars(), etc."
-                ),
-                url=target, parameter=param_name,
-                payload=payloads[0] if payloads else catalog.get("html_context", "<script>alert(1)</script>"),
-                evidence=self._extract_context(body, marker),
-                confidence=85,
-                cwe_id="CWE-79", owasp_id="A03:2021",
-                cvss_base=6.1,
-                cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
-                detection_method="reflection-marker",
-                source="module:xss",
-                evidence_request=req_ev, evidence_response=resp_ev,
-            ))
+            description = (
+                f"Le paramètre '{param_name}' est réfléchi tel quel dans la réponse "
+                f"({len(contexts)} contexte(s) détecté(s) : {', '.join(contexts) or 'html'}). "
+                "Un payload de script pourrait être exécuté."
+            )
+            recommendation = (
+                "Encoder la sortie selon le contexte (HTMLEntity, attribute, JS, URL). "
+                "Mettre en place une CSP stricte. Côté serveur : DOMPurify, htmlspecialchars(), etc."
+            )
+
+            confirmed = None
+            for ctx in contexts:
+                confirmed = self._try_confirm(parsed, params, param_name, ctx, depth, context)
+                if confirmed:
+                    break
+
+            if confirmed:
+                confirmed_payload, c_req_ev, c_resp_ev = confirmed
+                findings.append(Finding(
+                    type="xss", severity="high",
+                    title="Reflected XSS — Parameter Reflection",
+                    description=description,
+                    recommendation=recommendation,
+                    url=target, parameter=param_name,
+                    payload=confirmed_payload,
+                    evidence=f"Payload reflété sans échappement : {confirmed_payload[:150]}",
+                    confidence=95,
+                    cwe_id="CWE-79", owasp_id="A03:2021",
+                    cvss_base=6.1,
+                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+                    detection_method="payload-confirmed-unescaped",
+                    source="module:xss",
+                    evidence_request=c_req_ev, evidence_response=c_resp_ev,
+                ))
+            else:
+                findings.append(Finding(
+                    type="xss", severity="high",
+                    title="Reflected XSS — Parameter Reflection",
+                    description=description,
+                    recommendation=recommendation,
+                    url=target, parameter=param_name,
+                    payload=payloads[0] if payloads else catalog.get("html_context", "<script>alert(1)</script>"),
+                    evidence=self._extract_context(body, marker),
+                    confidence=85,
+                    cwe_id="CWE-79", owasp_id="A03:2021",
+                    cvss_base=6.1,
+                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+                    detection_method="reflection-marker",
+                    source="module:xss",
+                    evidence_request=req_ev, evidence_response=resp_ev,
+                ))
         return findings
+
+    def _try_confirm(self, parsed, original_params, param_name, ctx, depth, context):
+        """Essaie chaque payload du catalogue (filtré par depth) pour ce contexte, et retourne
+        (payload, req_ev, resp_ev) dès que l'un d'eux reflète verbatim et sans échappement."""
+        for item in get_payloads("xss", category=ctx, depth=depth):
+            payload_value = item["payload"]
+            try:
+                test_params = dict(original_params)
+                test_params[param_name] = payload_value
+                test_url = urlunparse(parsed._replace(query=urlencode(test_params)))
+                response, req_ev, resp_ev = http.get(test_url, context, capture=True, timeout=8,
+                                                       headers={"User-Agent": "VulnScan/1.2"})
+                if response is None:
+                    continue
+                if payload_value in response.text:
+                    return payload_value, req_ev, resp_ev
+            except Exception:
+                continue
+        return None
 
     @staticmethod
     def _detect_contexts(body: str, marker: str) -> List[str]:

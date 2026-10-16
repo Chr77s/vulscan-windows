@@ -254,6 +254,121 @@ def test_xss_module_selects_catalog_payload_for_detected_context(mocker):
     assert any(c.kwargs.get("category") == "html_context" for c in spy.call_args_list)
 
 
+def test_xss_confirms_second_catalog_payload_not_first(mocker):
+    """Si seul le 2e payload du catalogue reflète sans échappement, le finding doit le retenir (pas items[0])."""
+    from scanner.modules.xss import XssModule
+    import scanner.modules.xss as xss_mod
+    from scanner.payloads import get_payloads as real_get_payloads
+    from urllib.parse import urlparse, parse_qs
+
+    catalog_items = [
+        {"payload": "XSS_FIRST_NEVER_CONFIRMS", "category": "html_context"},
+        {"payload": "XSS_SECOND_CONFIRMS", "category": "html_context"},
+        {"payload": "XSS_THIRD_NEVER_TRIED", "category": "html_context"},
+    ]
+
+    def fake_payloads(family, category=None, depth=None):
+        if category == "html_context":
+            return catalog_items
+        return real_get_payloads(family, category=category, depth=depth)
+
+    mocker.patch.object(xss_mod, "get_payloads", side_effect=fake_payloads)
+
+    def fake_get(url, context, capture=False, **kwargs):
+        value = parse_qs(urlparse(url).query).get("q", [""])[0]
+        if value == "XSS_FIRST_NEVER_CONFIRMS":
+            body = "<div>&lt;escaped&gt;</div>"  # échappé : ne confirme pas
+        else:
+            body = f"<div>{value}</div>"  # marqueur + 2e payload : reflet verbatim
+        resp = mocker.Mock(status_code=200, headers={}, text=body)
+        if capture:
+            return resp, {"method": "GET", "url": url}, {"status": 200, "body_snippet": body}
+        return resp
+
+    mocker.patch("scanner.core.http.get", side_effect=fake_get)
+
+    findings = XssModule().scan("http://a?q=test", {})
+
+    assert findings
+    assert findings[0].payload == "XSS_SECOND_CONFIRMS"
+    assert findings[0].confidence == 95
+    assert findings[0].detection_method == "payload-confirmed-unescaped"
+
+
+def test_xss_falls_back_to_marker_evidence_when_nothing_confirms(mocker):
+    """Si aucun payload du catalogue ne reflète sans échappement, on retrouve le comportement actuel."""
+    from scanner.modules.xss import XssModule
+    import scanner.modules.xss as xss_mod
+    from scanner.payloads import get_payloads as real_get_payloads
+    from urllib.parse import urlparse, parse_qs
+
+    catalog_items = [
+        {"payload": "XSS_FIRST_ITEM", "category": "html_context"},
+        {"payload": "XSS_SECOND_ITEM", "category": "html_context"},
+    ]
+
+    def fake_payloads(family, category=None, depth=None):
+        if category == "html_context":
+            return catalog_items
+        return real_get_payloads(family, category=category, depth=depth)
+
+    mocker.patch.object(xss_mod, "get_payloads", side_effect=fake_payloads)
+
+    def fake_get(url, context, capture=False, **kwargs):
+        value = parse_qs(urlparse(url).query).get("q", [""])[0]
+        if value.startswith("XSS_"):
+            body = "<div>&lt;escaped&gt;</div>"  # jamais reflété tel quel
+        else:
+            body = f"<div>{value}</div>"  # marqueur : reflet verbatim (détection initiale)
+        resp = mocker.Mock(status_code=200, headers={}, text=body)
+        if capture:
+            return resp, {"method": "GET", "url": url}, {"status": 200, "body_snippet": body}
+        return resp
+
+    mocker.patch("scanner.core.http.get", side_effect=fake_get)
+
+    findings = XssModule().scan("http://a?q=test", {})
+
+    assert findings
+    assert findings[0].confidence == 85
+    assert findings[0].detection_method == "reflection-marker"
+    assert findings[0].payload == "XSS_FIRST_ITEM"
+
+
+def test_xss_threads_depth_into_confirmation_loop(mocker):
+    """depth doit être transmis à get_payloads par la boucle de confirmation, pas seulement par _payload_catalog."""
+    from scanner.modules.xss import XssModule
+    import scanner.modules.xss as xss_mod
+    from urllib.parse import urlparse, parse_qs
+
+    def fake_get(url, context, capture=False, **kwargs):
+        value = parse_qs(urlparse(url).query).get("q", [""])[0]
+        body = f"<div>{value}</div>"  # tout reflète verbatim
+        resp = mocker.Mock(status_code=200, headers={}, text=body)
+        if capture:
+            return resp, {"method": "GET", "url": url}, {"status": 200, "body_snippet": body}
+        return resp
+
+    mocker.patch("scanner.core.http.get", side_effect=fake_get)
+    spy = mocker.spy(xss_mod, "get_payloads")
+
+    XssModule().scan("http://a?q=test", {"depth": "basic"})
+    calls_basic = [c for c in spy.call_args_list
+                   if c.args and c.args[0] == "xss" and c.kwargs.get("category") == "html_context"]
+    assert len(calls_basic) >= 2, (
+        "get_payloads(category=html_context) doit être appelé à la fois par _payload_catalog "
+        "ET par la boucle de confirmation"
+    )
+    assert all(c.kwargs.get("depth") == "basic" for c in calls_basic)
+
+    spy.reset_mock()
+    XssModule().scan("http://a?q=test", {})
+    calls_none = [c for c in spy.call_args_list
+                  if c.args and c.args[0] == "xss" and c.kwargs.get("category") == "html_context"]
+    assert len(calls_none) >= 2
+    assert all(c.kwargs.get("depth") is None for c in calls_none)
+
+
 def test_command_injection_uses_catalog(mocker):
     from scanner.modules.command_injection import CommandInjectionModule
     import scanner.modules.command_injection as ci_mod
