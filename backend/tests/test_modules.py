@@ -369,6 +369,78 @@ def test_xss_threads_depth_into_confirmation_loop(mocker):
     assert all(c.kwargs.get("depth") is None for c in calls_none)
 
 
+def test_xss_does_not_confirm_when_payload_stays_inside_quoted_attribute(mocker):
+    """Un payload reflété verbatim ne suffit pas : s'il reste emprisonné dans l'attribut quoté
+    (aucun guillemet dans le payload pour casser la chaîne), ce n'est pas une vraie confirmation —
+    il faut retomber sur le fallback marker-reflection (85%), pas payload-confirmed-unescaped (95%)."""
+    from scanner.modules.xss import XssModule
+    import scanner.modules.xss as xss_mod
+    from scanner.payloads import get_payloads as real_get_payloads
+    from urllib.parse import urlparse, parse_qs
+
+    # Aucun caractère de guillemet : ne casse jamais un attribut quoté, même reflété tel quel.
+    NO_QUOTE_PAYLOAD = " autofocus onfocus=alert(1) x="
+
+    def fake_payloads(family, category=None, depth=None):
+        if category == "attribute_context":
+            return [{"payload": NO_QUOTE_PAYLOAD, "category": category}]
+        return real_get_payloads(family, category=category, depth=depth)
+
+    mocker.patch.object(xss_mod, "get_payloads", side_effect=fake_payloads)
+
+    def fake_get(url, context, capture=False, **kwargs):
+        value = parse_qs(urlparse(url).query).get("q", [""])[0]
+        # Le marqueur ET le payload de confirmation sont tous deux reflétés verbatim,
+        # mais toujours contenus dans un attribut correctement quoté (jamais sorti des guillemets).
+        body = f'<input value="{value}">'
+        resp = mocker.Mock(status_code=200, headers={}, text=body)
+        if capture:
+            return resp, {"method": "GET", "url": url}, {"status": 200, "body_snippet": body}
+        return resp
+
+    mocker.patch("scanner.core.http.get", side_effect=fake_get)
+
+    findings = XssModule().scan("http://a?q=test", {})
+
+    assert findings
+    assert findings[0].confidence == 85
+    assert findings[0].detection_method == "reflection-marker"
+
+
+def test_xss_confirms_when_payload_actually_breaks_out_of_quoted_attribute(mocker):
+    """Contrôle : un payload qui CONTIENT le guillemet de l'attribut doit toujours confirmer à 95%."""
+    from scanner.modules.xss import XssModule
+    import scanner.modules.xss as xss_mod
+    from scanner.payloads import get_payloads as real_get_payloads
+    from urllib.parse import urlparse, parse_qs
+
+    BREAKOUT_PAYLOAD = '" onmouseover="alert(1)'  # contient le guillemet : casse l'attribut
+
+    def fake_payloads(family, category=None, depth=None):
+        if category == "attribute_context":
+            return [{"payload": BREAKOUT_PAYLOAD, "category": category}]
+        return real_get_payloads(family, category=category, depth=depth)
+
+    mocker.patch.object(xss_mod, "get_payloads", side_effect=fake_payloads)
+
+    def fake_get(url, context, capture=False, **kwargs):
+        value = parse_qs(urlparse(url).query).get("q", [""])[0]
+        body = f'<input value="{value}">'
+        resp = mocker.Mock(status_code=200, headers={}, text=body)
+        if capture:
+            return resp, {"method": "GET", "url": url}, {"status": 200, "body_snippet": body}
+        return resp
+
+    mocker.patch("scanner.core.http.get", side_effect=fake_get)
+
+    findings = XssModule().scan("http://a?q=test", {})
+
+    assert findings
+    assert findings[0].confidence == 95
+    assert findings[0].detection_method == "payload-confirmed-unescaped"
+    assert findings[0].payload == BREAKOUT_PAYLOAD
+
+
 def test_command_injection_uses_catalog(mocker):
     from scanner.modules.command_injection import CommandInjectionModule
     import scanner.modules.command_injection as ci_mod

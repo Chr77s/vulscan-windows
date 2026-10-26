@@ -141,11 +141,29 @@ class XssModule(ScannerModule):
                                                        headers={"User-Agent": "VulnScan/1.2"})
                 if response is None:
                     continue
-                if payload_value in response.text:
+                if payload_value in response.text and self._breaks_context(response.text, payload_value):
                     return payload_value, req_ev, resp_ev
             except Exception:
                 continue
         return None
+
+    @staticmethod
+    def _breaks_context(body: str, payload_value: str) -> bool:
+        """Une réflexion verbatim ne prouve rien si le payload reste emprisonné dans l'attribut
+        ou la chaîne JS qui le contenait déjà : un serveur qui échappe correctement peut quand même
+        reflèter tel quel un payload qui ne contient aucun caractère à échapper (ex. un payload
+        attribute_context sans guillemet). On vérifie que le guillemet ouvrant juste avant le payload
+        est bien présent DANS le payload (donc qu'il casse réellement l'attribut/la chaîne) ;
+        s'il n'y a pas de guillemet ouvrant avant (html/svg/img/url context), rien à vérifier de plus."""
+        idx = body.find(payload_value)
+        if idx == -1:
+            return False
+        before = body[max(0, idx - 80):idx]
+        quote_match = re.search(r'=\s*(["\'])$', before)
+        if not quote_match:
+            return True
+        quote = quote_match.group(1)
+        return quote in payload_value
 
     @staticmethod
     def _detect_contexts(body: str, marker: str) -> List[str]:
