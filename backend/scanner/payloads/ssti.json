@@ -9,7 +9,6 @@
       {"payload": "*{1337*7331}",  "engine": "Thymeleaf (alt)",      "expected": "9801547", "confidence_hint": 85, "depth": "extended"},
       {"payload": "<%= 1337*7331 %>", "engine": "ERB (Ruby/Rails)", "expected": "9801547", "confidence_hint": 85, "depth": "extended"},
       {"payload": "{1337*7331}", "engine": "Smarty (PHP)",         "expected": "9801547", "confidence_hint": 85, "depth": "extended"},
-      {"payload": "#{1337*7331}", "engine": "Pug/Jade (Node.js)",  "expected": "9801547", "confidence_hint": 80, "depth": "aggressive"},
       {"payload": "@(1337*7331)", "engine": "Razor (ASP.NET)",     "expected": "9801547", "confidence_hint": 80, "depth": "aggressive"}
     ]
   }
