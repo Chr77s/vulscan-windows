@@ -34,13 +34,14 @@ def test_ssti_ignores_coincidental_49_substring_without_7_digit_oracle(mocker):
 
 
 def test_ssti_fetches_baseline_exactly_once_regardless_of_probe_count(mocker):
-    """La baseline est récupérée une seule fois puis réutilisée pour les 4 sondes du même
+    """La baseline est récupérée une seule fois puis réutilisée pour les N sondes du même
     paramètre — jamais re-fetchée à chaque essai. Si elle l'était, une page qui n'est pas
     parfaitement déterministe d'une requête à l'autre (timestamp, nonce, compteur) pourrait
-    faire croire à tort que '49' est absent de "la" baseline alors qu'il ne l'était que de
+    faire croire à tort que '9801547' est absent de "la" baseline alors qu'il ne l'était que de
     CETTE requête-ci — un seul fetch, comparé à toutes les sondes, évite ce piège."""
     from scanner.modules.ssti import SstiModule
     import scanner.modules.ssti as ssti_mod
+    from scanner.payloads import get_payloads
     response = mocker.Mock(status_code=200, headers={}, text="<p>hello</p>")
 
     def fake_get(url, ctx, capture=False, **kw):
@@ -52,8 +53,11 @@ def test_ssti_fetches_baseline_exactly_once_regardless_of_probe_count(mocker):
 
     mock_get = mocker.patch.object(ssti_mod.http, "get", side_effect=fake_get)
     SstiModule().scan("http://example.com/?name=hi", {})
-    # 1 baseline (capture=False, implicite) + 4 sondes (capture=True, une par PROBES) = 5 appels
-    assert mock_get.call_count == 5
+    # 1 baseline (capture=False, implicite) + 1 sonde par entrée du catalogue ssti (capture=True).
+    # Compté dynamiquement (pas de valeur en dur) pour ne pas re-casser ce test à chaque futur
+    # enrichissement du catalogue (cf. Task B2 : 4 -> 8 sondes arithmetic_probe).
+    expected_calls = 1 + len(get_payloads("ssti"))
+    assert mock_get.call_count == expected_calls
     assert mock_get.call_args_list[0].kwargs.get("capture", False) is False
 
 

@@ -7,12 +7,29 @@
       {"payload": "|id",        "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 90, "depth": "basic"},
       {"payload": "&& id",      "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 90, "depth": "basic"},
       {"payload": "`id`",       "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 85, "depth": "extended"},
-      {"payload": "$(id)",      "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 85, "depth": "extended"}
+      {"payload": "$(id)",      "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 85, "depth": "extended"},
+      {"payload": "|| id",      "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 85, "depth": "extended"},
+      {"payload": "& id",       "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 80, "depth": "extended"},
+      {"payload": ";id #",      "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 80, "depth": "extended"},
+      {"payload": "%0a id",     "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 75, "depth": "aggressive"},
+      {"payload": "%26 id",     "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 75, "depth": "aggressive"},
+      {"payload": "%3b id",     "signature": "uid=\\d+\\(\\w+\\)", "confidence_hint": 75, "depth": "aggressive"},
+      {"payload": "| whoami",   "signature": "\\\\?\\w+",          "confidence_hint": 70, "depth": "basic"},
+      {"payload": "&& whoami",  "signature": "\\\\?\\w+",          "confidence_hint": 70, "depth": "extended"},
+      {"payload": "|| whoami",  "signature": "\\\\?\\w+",          "confidence_hint": 70, "depth": "extended"},
+      {"payload": "; whoami",   "signature": "\\\\?\\w+",          "confidence_hint": 70, "depth": "extended"}
     ],
     "recon": [
       {"payload": "; uname -a", "signature": "Linux|Darwin", "confidence_hint": 80, "depth": "extended"},
       {"payload": "& whoami",   "signature": "\\\\?\\w+",    "confidence_hint": 70, "depth": "extended"},
-      {"payload": "| ipconfig", "signature": "Windows IP Configuration", "confidence_hint": 80, "depth": "aggressive"}
+      {"payload": "| ipconfig", "signature": "Windows IP Configuration", "confidence_hint": 80, "depth": "aggressive"},
+      {"payload": "; pwd",      "signature": "\\/(home|root|var|usr|srv|app)\\/[\\w./-]*", "confidence_hint": 65, "depth": "basic"},
+      {"payload": "| tasklist", "signature": "Image Name\\s+PID", "confidence_hint": 80, "depth": "extended"},
+      {"payload": "; ps -ef",   "signature": "UID\\s+PID\\s+PPID", "confidence_hint": 80, "depth": "extended"},
+      {"payload": "& ver",      "signature": "Microsoft Windows \\[Version", "confidence_hint": 85, "depth": "extended"},
+      {"payload": "& systeminfo", "signature": "OS Name:\\s*Microsoft Windows", "confidence_hint": 90, "depth": "aggressive"},
+      {"payload": "; cat /etc/passwd", "signature": "root:.*:0:0:", "confidence_hint": 90, "depth": "aggressive"},
+      {"payload": "& net user", "signature": "User accounts for", "confidence_hint": 80, "depth": "aggressive"}
     ]
   }
 }

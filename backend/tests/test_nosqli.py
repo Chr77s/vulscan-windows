@@ -23,9 +23,14 @@ def test_nosqli_detects_data_leak_via_body_growth(mocker):
 def test_nosqli_ignores_when_behavior_matches_baseline(mocker):
     """Même statut (toujours 401) et taille de corps dans la même bande (<20% d'écart) -> pas de finding."""
     from scanner.modules.nosqli import NoSqliModule
+    from scanner.payloads import get_payloads
     baseline = mocker.Mock(status_code=401, headers={}, text="invalid credentials, try again")
     same = mocker.Mock(status_code=401, headers={}, text="invalid credentials, retry please")
-    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [same] * 10)
+    # Aucun match -> jamais de break -> boucle sur les 2 clés × tout le catalogue nosqli.
+    # Taille calculée dynamiquement (pas de valeur en dur) pour ne pas re-casser ce test
+    # à chaque futur enrichissement du catalogue (cf. Task B2).
+    calls_needed = 1 + 2 * len(get_payloads("nosqli"))
+    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [same] * calls_needed)
     ctx = {"crawled": {"api_endpoints": ["http://example.com/api/login"]}}
     findings = NoSqliModule().scan("http://example.com/", ctx)
     assert findings == []
@@ -37,9 +42,11 @@ def test_nosqli_ignores_longer_body_on_different_rejecting_status_code(mocker):
     long que le corps vide de la baseline. Sous l'ancienne logique (body_grew sans contrainte
     de status code), cette fausse croissance aurait déclenché un finding critique à tort."""
     from scanner.modules.nosqli import NoSqliModule
+    from scanner.payloads import get_payloads
     baseline = mocker.Mock(status_code=401, headers={}, text="")
     rejection = mocker.Mock(status_code=400, headers={}, text='{"error":"password must be a string"}')
-    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [rejection] * 10)
+    calls_needed = 1 + 2 * len(get_payloads("nosqli"))
+    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [rejection] * calls_needed)
     ctx = {"crawled": {"api_endpoints": ["http://example.com/api/login"]}}
     findings = NoSqliModule().scan("http://example.com/", ctx)
     assert findings == []
