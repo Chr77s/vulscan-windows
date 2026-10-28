@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      :root {
+        --ground: #0b1120;
+        --ink: #e2e8f0;
+        --ink-dim: #94a3b8;
+        --accent: #818cf8;
+        --font-display: -apple-system, "Segoe UI", system-ui, sans-serif;
+        --crit: #ef4444;
+        --high: #f97316;
+        --med: #eab308;
+        --low: #22c55e;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1920px; height: 1080px; overflow: hidden;
+        background: var(--ground);
+        font-family: var(--font-display);
+        color: var(--ink);
+      }
+      .clip { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+      /* Scan-grid ground texture (not a glow) */
+      #grid {
+        position: absolute; inset: 0;
+        background-image:
+          linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
+        background-size: 48px 48px;
+      }
+
+      /* ---- Scene 1: title ---- */
+      #scene-title { display: flex; flex-direction: column; justify-content: center; padding: 0 160px; }
+      .row { display: flex; align-items: center; gap: 28px; }
+      #icon1 { width: 96px; height: 96px; border-radius: 50%; }
+      #brand { font-size: 56px; font-weight: 800; letter-spacing: -1px; }
+      #tagline { font-size: 32px; font-weight: 600; color: var(--ink-dim); margin-top: 34px; max-width: 980px; line-height: 1.4; }
+      #tagline .accent { color: var(--accent); }
+
+      /* ---- Scene 2: findings window ---- */
+      #scene-findings { display: flex; align-items: center; justify-content: center; }
+      #window {
+        width: 620px;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 30px 60px rgba(13,22,36,0.4);
+        clip-path: inset(0 100% 0 0);
+      }
+      #window img { display: block; width: 100%; }
+      #findings-caption {
+        position: absolute; left: 50%; top: 860px;
+        transform: translateX(-50%);
+        font-size: 30px; font-weight: 700; color: var(--ink);
+      }
+
+      /* ---- Scene 3: numbers ---- */
+      #scene-numbers { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      #count { font-size: 180px; font-weight: 800; color: var(--accent); letter-spacing: -4px; line-height: 1; }
+      #count-label { font-size: 34px; font-weight: 700; color: var(--ink-dim); margin-top: 6px; }
+      #chips { display: flex; gap: 18px; margin-top: 46px; }
+      .chip {
+        font-size: 28px; font-weight: 700; padding: 14px 32px; border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.04);
+        opacity: 0; transform: translateY(14px);
+      }
+
+      /* ---- Scene 4: CTA ---- */
+      #scene-cta { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; }
+      #icon2 { width: 56px; height: 56px; border-radius: 50%; }
+      #cta-text { font-size: 38px; font-weight: 700; color: var(--accent); }
+      #cta-sub { font-size: 28px; font-weight: 600; color: var(--ink-dim); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="20" data-width="1920" data-height="1080">
+      <div id="grid"></div>
+
+      <!-- Scene 1: title, 0-5s -->
+      <div id="scene-title" class="clip" data-start="0" data-duration="5" data-track-index="0">
+        <div class="row">
+          <img id="icon1" src="assets/icon.png" alt="" />
+          <div id="brand">VulnScan</div>
+        </div>
+        <div id="tagline" data-hold>Scanner de vulnérabilités <span class="accent">OWASP Top 10</span>, directement dans Chrome DevTools.</div>
+      </div>
+
+      <!-- Scene 2: findings window, 5-11s -->
+      <div id="scene-findings" class="clip" data-start="5" data-duration="6" data-track-index="0">
+        <div id="window"><img src="assets/popup.png" alt="" /></div>
+        <div id="findings-caption" data-hold>4 failles détectées en quelques secondes</div>
+      </div>
+
+      <!-- Scene 3: numbers, 11-16s -->
+      <div id="scene-numbers" class="clip" data-start="11" data-duration="5" data-track-index="0">
+        <div id="count">0</div>
+        <div id="count-label" style="opacity:0">modules de détection</div>
+        <div id="chips">
+          <div class="chip" style="color:#fff">JSON</div>
+          <div class="chip" style="color:#fff">SARIF</div>
+          <div class="chip" style="color:#fff">HTML</div>
+        </div>
+      </div>
+
+      <!-- Scene 4: CTA, 16-20s -->
+      <div id="scene-cta" class="clip" data-start="16" data-duration="4" data-track-index="0">
+        <img id="icon2" src="assets/icon.png" alt="" />
+        <div id="cta-text">github.com/Chr77s/vulscan-windows</div>
+        <div id="cta-sub">Extension Chrome · Backend Python · OWASP Top 10</div>
+      </div>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+
+      // --- Scene 1 (0-5s): title slides, tagline follows (never simultaneous) ---
+      // Opacity starts at 1 (not 0) so frame 0 — the social/README thumbnail — already shows the brand.
+      tl.fromTo("#scene-title .row", { x: -40 }, { x: 0, duration: 0.8, ease: "power3.out" }, 0);
+      tl.fromTo("#tagline", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" }, 0.33);
+
+      // --- Scene 2 (5-11s): window wipe reveal, caption slides from the right ---
+      tl.fromTo("#window", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 1.0, ease: "power3.out" }, 5);
+      tl.fromTo("#window", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 5);
+      tl.fromTo("#findings-caption", { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.67, ease: "power3.out" }, 7.0);
+
+      // --- Scene 3 (11-16s): count-up, then label, then staggered chips ---
+      const counter = { val: 0 };
+      tl.to(counter, {
+        val: 30, duration: 1.2, ease: "none",
+        onUpdate: () => { document.getElementById("count").textContent = Math.round(counter.val) + (counter.val >= 30 ? "+" : ""); }
+      }, 11);
+      tl.fromTo("#count-label", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 12.2);
+      tl.fromTo("#chips .chip:nth-child(1)", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.53, ease: "power3.out" }, 12.5);
+      tl.fromTo("#chips .chip:nth-child(2)", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.53, ease: "power3.out" }, 12.77);
+      tl.fromTo("#chips .chip:nth-child(3)", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.53, ease: "power3.out" }, 13.03);
+
+      // --- Scene 4 (16-20s): CTA ---
+      tl.fromTo("#scene-cta > *", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.67, ease: "power3.out", stagger: 0.08 }, 16);
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

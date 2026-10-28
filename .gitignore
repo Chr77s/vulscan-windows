@@ -16,3 +16,7 @@ Thumbs.db
 .claude/
 *.stackdump
 graphify-out/
+
+# HyperFrames project cache/renders (source composition is committed, not its local build output)
+videos/**/.hyperframes/
+videos/**/renders/
