@@ -11,3 +11,8 @@ backend/database/vulnscan.db-wal
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# Local tooling (Claude Code config, crash dumps, generated graph cache)
+.claude/
+*.stackdump
+graphify-out/
