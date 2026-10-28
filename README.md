@@ -1,5 +1,7 @@
 # 🛡️ VulnScan — Scanner de vulnérabilités web (extension Chrome + backend Python)
 
+![VulnScan](docs/promo/banner.png)
+
 VulnScan analyse les pages web dans Chrome pour détecter des vulnérabilités du **OWASP Top 10** et au-delà. Il combine :
 - une extension Chrome (Manifest V3) qui analyse le DOM côté client
 - un backend Python Flask **requis** qui fait ce que le navigateur ne peut pas (vrais en-têtes HTTP, base CVE, corrélation bayésienne)
