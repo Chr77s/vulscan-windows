@@ -7,7 +7,7 @@ VulnScan analyse les pages web dans Chrome pour détecter des vulnérabilités d
 
 Voir [ROADMAP.md](./ROADMAP.md) pour l'état d'avancement.
 
-## 🚀 Démarrage rapide
+## Démarrage rapide
 
 ### 1. Backend Python (REQUIS)
 ```bash
@@ -30,7 +30,7 @@ Deux options selon ton OS :
 - **JuiceCorp** (statique HTML, marche partout) — `test-site/` → `python -m http.server 8000`
 - **WebLab** (PHP + MySQL, plus complet) — copier `WebLab/` dans `C:\wamp64\www\` et importer le SQL
 
-## 🧩 Architecture
+## Architecture
 
 ```
 vulnscan-windows/
@@ -69,7 +69,7 @@ vulnscan-windows/
 └── README.md                 ← Vous êtes ici
 ```
 
-## 🔧 Pipeline de scan
+## Pipeline de scan
 
 ```
 1. User clic "▶ Scan"
@@ -93,7 +93,7 @@ vulnscan-windows/
 7. Export possible : JSON, CSV, HTML, XML, PDF (impression)
 ```
 
-## 📋 Détecteurs disponibles (Round 1)
+## Détecteurs disponibles (Round 1)
 
 | Module | Côté | Type | Statut |
 |---|---|---|---|
@@ -138,7 +138,7 @@ vulnscan-windows/
 | **Scan profiles** | extension | Quick / Standard / Deep / OWASP / API / Custom | ✅ |
 | **Chain detection** | inference | 4 règles d'élévation : LFI+log, OR+XSS, sub+cookie, SRI+mixed | ✅ |
 
-## 🧪 Tester
+## Tester
 
 1. Démarrer le backend : `backend/start.bat`
 2. Démarrer un site vulnérable : `python -m http.server 8000` dans `test-site/`, ou copier `WebLab/` dans WAMP
@@ -146,7 +146,7 @@ vulnscan-windows/
 4. Aller sur le site, F12 → VulnScan → Lancer un scan
 5. Tu devrais voir 20-40 vulnérabilités selon la page, chacune avec son score CVSS, CWE, OWASP, et un panneau pliable contenant tout le détail
 
-## 📤 Export multi-format
+## Export multi-format
 
 Bouton dans la status bar :
 - **JSON** : format complet, parsable, conserve tous les champs
