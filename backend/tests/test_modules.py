@@ -88,8 +88,9 @@ def test_lfi_confirmed_finding_has_evidence_request_response(mocker):
 
 def test_command_injection_confirmed_finding_has_evidence(mocker):
     from scanner.modules.command_injection import CommandInjectionModule
+    baseline = mocker.Mock(status_code=200, headers={}, text="plain page")
     confirming = mocker.Mock(status_code=200, headers={}, text="uid=0(root) gid=0(root)")
-    mocker.patch("scanner.core.http.requests.request", return_value=confirming)
+    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [confirming] * 50)
     findings = CommandInjectionModule().scan("http://example.com/?cmd=ping", {})
     assert findings and findings[0].evidence_request is not None
 
@@ -512,3 +513,55 @@ def test_form_fuzzer_pulls_extra_sqli_and_lfi_payloads(mocker):
     FormFuzzerModule().scan("http://a", {"crawled": {"forms": [form]}})
     families_called = {c.args[0] for c in spy.call_args_list if c.args}
     assert families_called >= {"sqli", "lfi"}
+
+
+# --- command-injection : précision (baseline différentielle) ---
+
+def _cmdi_scan(mocker, body_for, target="http://a/?host=example.com", baseline_fails=False):
+    """body_for(payload_value) -> texte de la réponse ; payload_value == "example.com" pour la baseline."""
+    from urllib.parse import urlparse, parse_qs
+    from scanner.modules.command_injection import CommandInjectionModule
+
+    def fake_get(url, ctx, capture=False, **kw):
+        value = parse_qs(urlparse(url).query)["host"][0]
+        if baseline_fails and value == "example.com":
+            return None, None, None
+        r = mocker.Mock(status_code=200, headers={}, text=body_for(value))
+        return r, {"method": "GET", "url": url, "headers": {}, "body": None},             {"status": 200, "headers": {}, "body_snippet": r.text, "elapsed_ms": 1.0}
+
+    mocker.patch("scanner.core.http.get", side_effect=fake_get)
+    return CommandInjectionModule().scan(target, {"depth": "aggressive"})
+
+
+PLAIN_PAGE = "<html><body><h1>Welcome</h1><p>Hello world these are ordinary words</p></body></html>"
+
+
+def test_command_injection_no_finding_on_plain_page(mocker):
+    assert _cmdi_scan(mocker, lambda v: PLAIN_PAGE) == []
+
+
+def test_command_injection_no_finding_when_signature_already_in_baseline(mocker):
+    assert _cmdi_scan(mocker, lambda v: "docs: uid=0(root) gid=0(root)") == []
+
+
+def test_command_injection_confirms_id_output_absent_from_baseline(mocker):
+    from scanner.payloads import get_payloads
+    findings = _cmdi_scan(
+        mocker,
+        lambda v: "uid=33(www-data) gid=33(www-data)" if " id" in v or "id" in v[len("example.com"):] else PLAIN_PAGE,
+    )
+    assert len(findings) == 1
+    entry = next(p for p in get_payloads("command_injection", depth="aggressive")
+                 if p["payload"] == findings[0].payload)
+    assert findings[0].confidence == entry["confidence_hint"]
+
+
+def test_command_injection_confirms_windows_whoami_output(mocker):
+    findings = _cmdi_scan(
+        mocker, lambda v: "desktop-abc\\chris" if "whoami" in v else PLAIN_PAGE)
+    assert len(findings) == 1
+    assert "whoami" in findings[0].payload
+
+
+def test_command_injection_skips_param_when_baseline_fails(mocker):
+    assert _cmdi_scan(mocker, lambda v: "uid=0(root)", baseline_fails=True) == []

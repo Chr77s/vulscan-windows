@@ -31,10 +31,9 @@ class CommandInjectionModule(ScannerModule):
                       "ip", "target", "address", "shell", "lookup"}
 
     def scan(self, target: str, context: Dict[str, Any]) -> List[Finding]:
-        payloads = [
-            (p["payload"], p.get("signature", ""))
-            for p in get_payloads("command_injection", depth=context.get("depth"))
-        ]
+        # Une signature vide matcherait n'importe quelle page.
+        payloads = [p for p in get_payloads("command_injection", depth=context.get("depth"))
+                    if p.get("signature")]
         if not re.match(r"^https?://", target):
             return []
         findings: List[Finding] = []
@@ -45,7 +44,17 @@ class CommandInjectionModule(ScannerModule):
             if param_name.lower() not in self.SUSPECT_PARAMS:
                 continue
 
-            for payload, sig in payloads:
+            # Référence propre : sans elle, impossible de confirmer (précision > rappel).
+            try:
+                base_r, _, _ = http.get(target, context, capture=True, timeout=8,
+                                        headers={"User-Agent": "VulnScan/1.2"})
+            except Exception:
+                continue
+            if base_r is None:
+                continue
+
+            for entry in payloads:
+                payload, sig = entry["payload"], entry["signature"]
                 try:
                     new_params = dict(params)
                     new_params[param_name] = base_value + payload
@@ -54,8 +63,9 @@ class CommandInjectionModule(ScannerModule):
                                                    headers={"User-Agent": "VulnScan/1.2"})
                     if r is None:
                         continue
-                    if re.search(sig, r.text):
-                        match_text = re.search(sig, r.text).group(0)
+                    m = re.search(sig, r.text)
+                    if m and not re.search(sig, base_r.text):
+                        match_text = m.group(0)
                         findings.append(Finding(
                             type="command-injection", severity="critical",
                             title="Injection de commande OS confirmée",
@@ -70,7 +80,7 @@ class CommandInjectionModule(ScannerModule):
                             url=target, parameter=param_name,
                             payload=payload,
                             evidence=match_text,
-                            confidence=95,
+                            confidence=entry.get("confidence_hint", 80),
                             cwe_id="CWE-78", owasp_id="A03:2021",
                             cvss_base=9.8,
                             cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
