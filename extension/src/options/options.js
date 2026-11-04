@@ -5,6 +5,7 @@
 const DEFAULT_CONFIG = {
   passiveEnabled: true,
   activeEnabled: false,
+  domXssConfirm: true,
   testSQLi: true,
   testXSS: true,
   testPathTraversal: true,
@@ -30,7 +31,7 @@ const DEFAULT_CONFIG = {
 };
 
 const CHECKBOX_FIELDS = [
-  "passiveEnabled", "activeEnabled",
+  "passiveEnabled", "activeEnabled", "domXssConfirm",
   "testSQLi", "testXSS", "testPathTraversal", "testCmdInjection", "testCSRF",
   "testClickjacking", "testMixedContent", "testOpenRedirect", "testCookies", "testSRI",
   "useBackend",

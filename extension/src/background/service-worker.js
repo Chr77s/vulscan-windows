@@ -9,6 +9,7 @@
 import { DEFAULT_CONFIG } from "../utils/constants.js";
 import { enrichFinding } from "../utils/taxonomy.js";
 import { pollScanJob } from "../utils/job-poller.js";
+import { buildDomProbes, runDomProbes, domFindingFromHit } from "../utils/dom-xss-probe.js";
 
 // ---- État global ----
 let currentScan = null;
@@ -281,6 +282,18 @@ async function startScan(tabId, url) {
     console.log("[VulnScan] Tests actifs désactivés (activeEnabled = false)");
   }
 
+  if (stopped()) return { success: true };
+
+  // 5b. Phase D — confirmation DOM XSS dans un onglet caché (profils profonds uniquement)
+  if (cfg.activeEnabled && ["deep", "owasp", "custom"].includes(cfg.scanProfile) && cfg.domXssConfirm !== false) {
+    broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "dom-xss", label: "Confirmation DOM XSS (onglet caché)..." } });
+    const line = await runDomXssPhase(url, scan, stopped);
+    if (!stopped()) {
+      scan.moduleLog = [...(scan.moduleLog || []), line];
+      broadcastMessage({ type: "MODULE_LOG", payload: [line] });
+    }
+  }
+
   // 6. Finalisation
   return stopped() ? { success: true } : finalizeScan();
 }
@@ -509,6 +522,79 @@ async function runActiveModules(cfg, url) {
       const { activeScanJob } = await chrome.storage.session.get("activeScanJob");
       if (!myJobId || activeScanJob?.jobId === myJobId) await chrome.storage.session.remove("activeScanJob");
     } catch { /* best effort */ }
+  }
+}
+
+// =====================================================
+// Phase D — confirmation DOM XSS (fenêtre minimisée, un seul onglet réutilisé)
+// =====================================================
+const DOM_LOAD_CAP_MS = 4000, DOM_SETTLE_MS = 600, DOM_PROBE_HARD_MS = 5600; // 4000 + 600 + 1000 de marge
+
+// Ne rejette jamais et se résout toujours en <= DOM_PROBE_HARD_MS ; vrai ssi le jeton est posé sur <html>.
+async function checkProbeInTab(tabId, probe) {
+  let onUpdated, hardTimer, loadTimer;
+  const attempt = (async () => {
+    // Un changement de fragment seul ne recharge pas la page : repasser par about:blank.
+    if (probe.param === "#hash") await chrome.tabs.update(tabId, { url: "about:blank" });
+    await new Promise((resolve) => {
+      let sawLoading = false; // ignore le « complete » résiduel de la page précédente
+      onUpdated = (id, info) => {
+        if (id !== tabId) return;
+        if (info.status === "loading") sawLoading = true;
+        else if (info.status === "complete" && sawLoading) resolve();
+      };
+      chrome.tabs.onUpdated.addListener(onUpdated);
+      loadTimer = setTimeout(resolve, DOM_LOAD_CAP_MS);
+      chrome.tabs.update(tabId, { url: probe.probeUrl }).catch(resolve);
+    });
+    await new Promise((res) => setTimeout(res, DOM_SETTLE_MS));
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => document.documentElement.getAttribute("data-vulnscan-hit"),
+    });
+    return res?.result === probe.token;
+  })().catch(() => false);
+  const hard = new Promise((res) => { hardTimer = setTimeout(() => res(false), DOM_PROBE_HARD_MS); });
+  try {
+    return await Promise.race([attempt, hard]);
+  } finally {
+    clearTimeout(hardTimer); clearTimeout(loadTimer);
+    if (onUpdated) chrome.tabs.onUpdated.removeListener(onUpdated);
+  }
+}
+
+// Renvoie la ligne de journal du module ; n'écrit dans `scan` que tant que stopped() est faux.
+async function runDomXssPhase(url, scan, stopped) {
+  const t0 = Date.now();
+  let win = null;
+  try {
+    let probes;
+    try { probes = buildDomProbes(url, { maxProbes: 16 }); }
+    catch (e) { return { module: "dom-xss", findings: 0, elapsedMs: 0, status: "error", error: e.message }; }
+    try {
+      win = await chrome.windows.create({ state: "minimized", url: "about:blank", focused: false });
+    } catch (e) {
+      console.warn("[VulnScan] DOM XSS : fenêtre impossible :", e.message);
+      return { module: "dom-xss", findings: 0, elapsedMs: 0, status: "error", error: e.message };
+    }
+    const tabId = win.tabs?.[0]?.id;
+    if (tabId == null) return { module: "dom-xss", findings: 0, elapsedMs: 0, status: "error", error: "onglet de sonde introuvable" };
+    const hits = await runDomProbes({
+      probes, check: (p) => checkProbeInTab(tabId, p),
+      now: () => Date.now(), budgetMs: 40000, isStopped: stopped,
+    });
+    let n = 0;
+    if (!stopped()) {
+      for (const hit of hits) {
+        const enriched = ensureFinding(domFindingFromHit(hit), url);
+        scan.vulnerabilities.push(enriched);
+        broadcastMessage({ type: "VULN_FOUND", payload: enriched });
+        n++;
+      }
+    }
+    return { module: "dom-xss", findings: n, elapsedMs: Date.now() - t0 };
+  } finally {
+    if (win?.id != null) { try { await chrome.windows.remove(win.id); } catch { /* déjà fermée */ } }
   }
 }
 

@@ -5,6 +5,7 @@
 export const DEFAULT_CONFIG = {
   passiveEnabled: true,
   activeEnabled: false,
+  domXssConfirm: true, // confirmation DOM XSS dans un onglet caché (profils deep/owasp/custom)
   testSQLi: true,
   testXSS: true,
   testPathTraversal: true,
