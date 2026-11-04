@@ -17,6 +17,7 @@ import pkgutil
 import time
 
 from .module_base import ScannerModule, Finding
+from .http import time_left
 
 logger = logging.getLogger("vulnscan.engine")
 
@@ -76,13 +77,22 @@ class ScannerEngine:
             context = {}
         findings: List[Finding] = []
 
+        # Budget temps : budget <= 0 ou non numérique = absent ; une deadline
+        # déjà fournie par l'appelant n'est jamais écrasée.
+        try:
+            budget = float(context.get("time_budget_s"))
+        except (TypeError, ValueError):
+            budget = 0.0
+        if budget > 0:
+            context.setdefault("deadline", time.monotonic() + budget)
+
         # =========================================================
         # PHASE 0 — Crawler / discovery (avant les modules d'injection)
         # =========================================================
         if crawl and "crawled" not in context:
             try:
                 from .crawler import Crawler
-                crawler = Crawler(max_depth=1, max_pages=30)
+                crawler = Crawler(max_depth=1, max_pages=30, deadline=context.get("deadline"))
                 context["crawled"] = crawler.crawl(target, auth=context.get("auth"))
                 logger.info(f"Crawler : {context['crawled']['stats']}")
             except Exception as e:
@@ -101,6 +111,12 @@ class ScannerEngine:
 
         module_log: List[Dict[str, Any]] = []
         for cls in modules_to_run:
+            left = time_left(context)
+            if left is not None and left <= 0:
+                module_log.append({"module": cls.name, "findings": 0, "elapsed_ms": 0,
+                                   "status": "skipped", "reason": "time_budget"})
+                continue
+            # shortcut: ssl_tls/subdomain_enum/oob bypass http.send, so a module started just before the deadline can overrun by its own max (~15 s); the extension aborts 15 s after the budget for that reason — upgrade to per-module cancellation if that margin proves too small.
             t0 = time.monotonic()
             try:
                 instance = cls()

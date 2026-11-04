@@ -16,6 +16,7 @@ from urllib.parse import urlparse, urljoin, urldefrag
 import requests
 import re
 import logging
+import time
 
 logger = logging.getLogger("vulnscan.crawler")
 
@@ -41,11 +42,13 @@ class Crawler:
                  max_depth: int = 1,
                  max_pages: int = 30,
                  timeout: int = 5,
-                 user_agent: str = "VulnScan/1.3 (security-audit)"):
+                 user_agent: str = "VulnScan/1.3 (security-audit)",
+                 deadline: Optional[float] = None):
         self.max_depth = max_depth
         self.max_pages = max_pages
         self.timeout = timeout
         self.user_agent = user_agent
+        self.deadline = deadline  # time.monotonic() ; None = pas de limite
         self._visited: Set[str] = set()
 
     def crawl(self, seed_url: str, auth: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -65,7 +68,7 @@ class Crawler:
         comments: List[str] = []
 
         queue = [(seed_url, 0)]
-        while queue and len(self._visited) < self.max_pages:
+        while queue and len(self._visited) < self.max_pages and not self._out_of_time():
             current_url, depth = queue.pop(0)
             current_url = urldefrag(current_url)[0]  # supprime fragment #
             if current_url in self._visited:
@@ -90,8 +93,8 @@ class Crawler:
                             queue.append((link, depth + 1))
 
         # Bonus : robots.txt + sitemap.xml
-        extra_urls = self._fetch_robots_sitemap(seed_url)
-        urls.update(extra_urls)
+        if not self._out_of_time():
+            urls.update(self._fetch_robots_sitemap(seed_url))
 
         result = {
             "seed": seed_url,
@@ -112,6 +115,9 @@ class Crawler:
     # -----------------------------------------------------------
     # Internes
     # -----------------------------------------------------------
+    def _out_of_time(self) -> bool:
+        return self.deadline is not None and time.monotonic() >= self.deadline
+
     def _fetch_and_parse(self, url: str) -> Optional[Dict[str, Any]]:
         try:
             req_headers = {"User-Agent": self.user_agent}

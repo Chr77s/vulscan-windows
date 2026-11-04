@@ -58,3 +58,23 @@ def test_crawler_empty_for_invalid_url():
     from scanner.core.crawler import Crawler
     result = Crawler().crawl("not-a-url")
     assert result["stats"]["pages_visited"] == 0
+
+
+def test_crawler_with_past_deadline_fetches_nothing():
+    import time
+    from unittest.mock import patch
+    from scanner.core.crawler import Crawler
+    with patch("scanner.core.crawler.requests.get") as get:
+        result = Crawler(deadline=time.monotonic() - 1).crawl("http://a/")
+    get.assert_not_called()
+    assert set(result["urls"]) <= {"http://a/"}
+
+
+def test_crawler_without_deadline_unchanged():
+    from unittest.mock import patch, Mock
+    from scanner.core.crawler import Crawler
+    resp = Mock(status_code=200, text="<html><body>hi</body></html>")
+    with patch("scanner.core.crawler.requests.get", return_value=resp) as get:
+        result = Crawler().crawl("http://a/")
+    assert get.called
+    assert "http://a/" in result["urls"]

@@ -148,3 +148,79 @@ def test_engine_auto_discovery():
                 # Round 5 — pro-grade (Option B : suite)
                 "waf-detect", "race-conditions", "subdomain-enum"}
     assert expected.issubset(names), f"Modules manquants : {expected - names}"
+
+
+# ---------------------------------------------------------------------
+# Budget temps (time_budget_s -> deadline)
+# ---------------------------------------------------------------------
+def _budget_module(mod_name, past_deadline=False, crash=False):
+    import time
+
+    class _M(ScannerModule):
+        name = mod_name
+        category = "test"
+        default_enabled = True
+
+        def scan(self, target, context):
+            if past_deadline:
+                context["deadline"] = time.monotonic() - 1
+            if crash:
+                raise RuntimeError("boom")
+            return [Finding(type=f"t-{mod_name}", severity="low", url=target,
+                            description="d", recommendation="r")]
+
+    return _M
+
+
+def _run_budget(mods, context):
+    engine = ScannerEngine()
+    for m in mods:
+        engine.register(m)
+    findings = engine.run("http://x.test", context=context,
+                          enabled=[m.name for m in mods], crawl=False)
+    return findings, {e["module"]: e for e in context["module_log"]}
+
+
+def test_budget_skips_modules_after_deadline():
+    ctx = {"time_budget_s": 30}
+    findings, log = _run_budget(
+        [_budget_module("a", past_deadline=True), _budget_module("b"), _budget_module("c")], ctx)
+    assert [f.type for f in findings] == ["t-a"]
+    for n in ("b", "c"):
+        assert log[n] == {"module": n, "findings": 0, "elapsed_ms": 0,
+                          "status": "skipped", "reason": "time_budget"}
+    assert "status" not in log["a"]
+
+
+def test_no_budget_adds_no_deadline():
+    ctx = {}
+    findings, log = _run_budget([_budget_module("a"), _budget_module("b")], ctx)
+    assert "deadline" not in ctx
+    assert len(findings) == 2
+    assert all("status" not in e for e in log.values())
+
+
+def test_budget_string_and_garbage():
+    ctx = {"time_budget_s": "45"}
+    _run_budget([_budget_module("a")], ctx)
+    assert "deadline" in ctx
+    for bad in ("abc", 0, -5, None):
+        ctx = {"time_budget_s": bad}
+        _run_budget([_budget_module("a")], ctx)
+        assert "deadline" not in ctx
+
+
+def test_existing_deadline_not_overwritten():
+    ctx = {"time_budget_s": 30, "deadline": 123.0}
+    findings, log = _run_budget([_budget_module("a"), _budget_module("b")], ctx)
+    assert ctx["deadline"] == 123.0
+    assert findings == []
+    assert all(e["status"] == "skipped" for e in log.values())
+
+
+def test_crash_after_deadline_still_logged_as_error():
+    ctx = {"time_budget_s": 30}
+    _, log = _run_budget([_budget_module("a", past_deadline=True, crash=True),
+                          _budget_module("b")], ctx)
+    assert log["a"]["status"] == "error"
+    assert log["b"]["status"] == "skipped"

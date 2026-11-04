@@ -49,6 +49,9 @@ def _module_log_entry(e):
     if e.get("status") == "error":
         entry["status"] = "error"
         entry["error"] = e.get("error")
+    elif e.get("status") == "skipped":
+        entry["status"] = "skipped"
+        entry["reason"] = e.get("reason")
     return entry
 
 

@@ -35,3 +35,11 @@ def test_run_scan_discovery_includes_full_form_list(mocker):
     returned_fields = returned_form["fields"]
     assert returned_fields == [{"name": "user", "type": "text", "required": True}]
     assert "value" not in returned_fields[0]
+
+
+def test_module_log_entry_exposes_skipped():
+    from routes.scanner_engine import _module_log_entry
+    raw = {"module": "x", "findings": 0, "elapsed_ms": 0,
+           "status": "skipped", "reason": "time_budget"}
+    assert _module_log_entry(raw) == {"module": "x", "findings": 0, "elapsedMs": 0,
+                                      "status": "skipped", "reason": "time_budget"}
