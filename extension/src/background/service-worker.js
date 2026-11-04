@@ -166,6 +166,11 @@ async function startScan(tabId, url) {
   }
 
   // 2. Préparer le scan
+  // Un scan encore en cours (2e onglet) est remplacé : libérer son job backend, il n'écrira plus rien.
+  if (currentScan && activeRun && activeRun.scan === currentScan) {
+    activeRun.stopRequested = true;
+    if (currentScan.backendJobId) cancelBackendJob(activeRun.backendUrl, currentScan.backendJobId);
+  }
   activeRun = null; // jamais d'état d'arrêt hérité d'un scan précédent
   const scan = currentScan = {
     id: crypto.randomUUID(),
@@ -399,9 +404,10 @@ async function runActiveModules(cfg, url) {
   const EMPTY = { findings: [], discovery: null, moduleLog: [] };
   // Une ligne d'activité synthétique pour dire pourquoi aucun résultat actif n'est revenu.
   // Elle est aussi renvoyée dans moduleLog : SCAN_COMPLETED remplace la console par scan.moduleLog.
+  const live = () => run && run.scan === currentScan; // ce run appartient encore au scan courant
   const reportError = (reason) => {
     const line = { module: "scanner", findings: 0, elapsedMs: 0, status: "error", error: reason };
-    broadcastMessage({ type: "MODULE_LOG", payload: [line] });
+    if (live()) broadcastMessage({ type: "MODULE_LOG", payload: [line] });
     return line;
   };
 
@@ -447,7 +453,7 @@ async function runActiveModules(cfg, url) {
       sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
       now: () => Date.now(),
       onProgress: (entries) => {
-        try { broadcastMessage({ type: "MODULE_LOG", payload: entries }); }
+        try { if (live()) broadcastMessage({ type: "MODULE_LOG", payload: entries }); }
         catch (e) { console.warn("[VulnScan] onProgress :", e.message); }
       },
       // Appel d'API extension toutes les 2 s : réarme aussi le minuteur d'inactivité du worker.
