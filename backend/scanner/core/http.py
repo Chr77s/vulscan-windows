@@ -144,6 +144,12 @@ def _throttle(url, context):
         _last_request_at[host] = time.monotonic()
 
 
+def time_left(context: Optional[Dict[str, Any]]) -> Optional[float]:
+    """Secondes restantes avant context["deadline"] (time.monotonic), None si pas de budget."""
+    deadline = (context or {}).get("deadline")
+    return None if deadline is None else deadline - time.monotonic()
+
+
 def send(method: str,
          url: str,
          context: Optional[Dict[str, Any]] = None,
@@ -155,8 +161,16 @@ def send(method: str,
     Si capture=True : retourne un triplet (response_ou_none, evidence_request_ou_none, evidence_response_ou_none).
     L'evidence ne contient jamais de secret en clair (headers sensibles redactés, tuple Basic Auth jamais lu).
     """
+    remaining = time_left(context)
+    if remaining is not None and remaining <= 0:  # avant _throttle : ne pas dormir pour rien
+        return (None, None, None) if capture else None
     _throttle(url, context)
     opts = _merged_kwargs(context, kwargs)
+    remaining = time_left(context)  # le throttle a pu dormir
+    if remaining is not None:
+        clip = lambda t: max(0.5, min(t, remaining))
+        t = opts["timeout"]
+        opts["timeout"] = tuple(clip(x) for x in t) if isinstance(t, tuple) else clip(t)
     try:
         start = time.monotonic()
         response = requests.request(method.upper(), url, **opts)

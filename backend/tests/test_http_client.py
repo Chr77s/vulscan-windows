@@ -139,3 +139,61 @@ def test_get_and_post_pass_capture_through(mocker):
     assert response is fake and req_ev["method"] == "GET"
     response2, req_ev2, resp_ev2 = http.post("http://example.com/x", capture=True, json={"a": 1})
     assert response2 is fake and req_ev2["method"] == "POST"
+
+
+# --- Scan deadline (budget temps) ---
+
+def _timeout_sent(mocker, deadline, **kwargs):
+    from scanner.core import http
+    mocker.patch("scanner.core.http._throttle")
+    req = mocker.patch("scanner.core.http.requests.request",
+                       return_value=mocker.Mock(status_code=200, headers={}, text=""))
+    ctx = {} if deadline is None else {"deadline": deadline}
+    http.get("http://a/", ctx, **kwargs)
+    return req.call_args.kwargs["timeout"]
+
+
+def test_send_with_past_deadline_sends_nothing(mocker):
+    import time
+    from scanner.core import http
+    throttle = mocker.patch("scanner.core.http._throttle")
+    req = mocker.patch("scanner.core.http.requests.request")
+    context = {"deadline": time.monotonic() - 1}
+    assert http.get("http://a/", context) is None
+    assert http.get("http://a/", context, capture=True) == (None, None, None)
+    req.assert_not_called()
+    throttle.assert_not_called()
+
+
+def test_send_clips_timeout_to_remaining_time(mocker):
+    import time
+    t = _timeout_sent(mocker, time.monotonic() + 2, timeout=8)
+    assert 0.5 <= t <= 2
+
+
+def test_send_never_raises_callers_timeout(mocker):
+    import time
+    assert _timeout_sent(mocker, time.monotonic() + 100, timeout=3) == 3
+
+
+def test_send_timeout_floor_is_half_second(mocker):
+    import time
+    assert _timeout_sent(mocker, time.monotonic() + 0.1, timeout=8) == 0.5
+
+
+def test_send_clips_tuple_timeout(mocker):
+    import time
+    t = _timeout_sent(mocker, time.monotonic() + 2, timeout=(5, 8))
+    assert all(0.5 <= x <= 2 for x in t)
+
+
+def test_send_without_deadline_is_unchanged(mocker):
+    assert _timeout_sent(mocker, None, timeout=8) == 8
+
+
+def test_time_left():
+    import time
+    from scanner.core.http import time_left
+    assert time_left(None) is None
+    assert time_left({}) is None
+    assert 4 <= time_left({"deadline": time.monotonic() + 5}) <= 5
