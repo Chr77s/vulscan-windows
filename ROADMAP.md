@@ -1,13 +1,13 @@
-# 🗺️ VulnScan — Roadmap
+# VulnScan — Roadmap
 
-Le projet est livré en **rounds successifs** pour rester maintenable. Voici où nous en sommes et ce qui reste.
+Le projet est livré en **rounds successifs** pour rester maintenable. Voici ce qui est livré et ce qui reste.
 
 ## ✅ Round 0 (initial)
 - Extension MV3 fonctionnelle (popup, devtools panel, content-script, options)
 - Backend Flask : `/health`, `/analysis/parse-html`, `/analysis/headers`, `/analysis/blind-sqli`
 - Site de test JuiceCorp (~10 vulns)
 
-## ✅ Round 1 (cette session)
+## ✅ Round 1
 - **UI : cartes pliables** avec "Voir plus", search, filtres par sévérité, progression temps réel, onglet Historique
 - **Enrichissement du modèle** : chaque finding a OWASP, CWE, CVSS v3.1 (score + vecteur), impact, références
 - **Architecture modulaire backend** : `scanner/core/` + `scanner/modules/` (headers, sqli, xss, info-disclosure)
@@ -15,14 +15,14 @@ Le projet est livré en **rounds successifs** pour rester maintenable. Voici où
 - **Exports** : JSON, CSV, HTML, **PDF** (via impression), **XML** (nouveau)
 - **WebLab** : projet PHP/MySQL pour WAMP — 8 pages vulnérables + admin panel + API + JWT + schéma MySQL + 5 users + 10 produits + commandes + factures
 
-## ✅ Round 2 (cette session)
+## ✅ Round 2
 - **8 nouveaux modules backend** : LFI, SSRF, command-injection, open-redirect, IDOR, JWT analyzer (alg=none + dico HS256), CORS misconfig, XXE
 - **Persistance SQLite** côté backend : `database/db.py` + table `scans` + table `findings` indexées + endpoints `/history/list`, `/history/save`, `/history/<id>`, `/history/diff`, `DELETE /history/<id>`
 - **Comparaison de 2 scans** : onglet "⇆ Diff" avec sélection par checkboxes, calcul added/removed/changed/stable, cartes colorées (rouge = nouvelles régressions, vert = corrigées, jaune = modifiées)
 - **WebLab étoffé** : `upload.php` (file upload sans validation), `ssrf.php` (proxy URL), `xxe.php` (parseur XML avec entités externes), `backup/database_2025.sql` (dump exposé), `api/orders.php` (IDOR + SQLi + leak SQL)
 - **Tests unitaires pytest** : `tests/test_engine.py`, `tests/test_database.py`, `tests/test_modules.py` + `run_tests.bat` Windows
 
-## ✅ Round 3 (cette session)
+## ✅ Round 3
 - **Sauvegarde auto SQLite** : tout scan terminé est poussé vers `/history/save` en best-effort
 - **Endpoint `GET_RESULTS_BACKEND`** pour rapatrier l'historique persisté côté serveur
 - **Catalogue de payloads JSON** : `scanner/payloads/{xss,sqli,lfi,ssrf,dir_bruteforce}.json` + loader `PayloadCatalog`
@@ -43,7 +43,7 @@ Le projet est livré en **rounds successifs** pour rester maintenable. Voici où
   - `admin/delete_user.php` : action destructive en GET sans auth + CSRF + SQLi
   - `.git-exposed-demo/HEAD` + `.git-exposed-demo/config` : repo Git "leaké"
 
-## ✅ Round 4 (cette session) — surface d'attaque étendue
+## ✅ Round 4 — surface d'attaque étendue
 - **Crawler intégré** (`scanner/core/crawler.py`) : extrait liens, formulaires (action/method/fields), endpoints API depuis JS (fetch/axios/XHR), robots.txt, sitemap.xml
 - **Moteur enrichi** : phase 0 = découverte. Le contexte du scan contient désormais `crawled.{urls, forms, api_endpoints}` que tout module peut consommer
 - **4 nouveaux modules d'injection sur surface étendue** :
@@ -54,52 +54,91 @@ Le projet est livré en **rounds successifs** pour rester maintenable. Voici où
 - **2 nouveaux catalogues de payloads** : `headers.json` (UA/Referer/XFF/Host/Cookie) + `param_names.json` (~80 noms répartis en common/auth/feature_flags/ssrf/file/ecommerce)
 - **Tests** : `test_crawler.py` (parsing form, extraction endpoints JS) + extension de `test_engine.py` aux 4 nouveaux modules
 
-## ✅ Round 5 (cette session) — Pro-grade upgrades (5 game-changers)
-- **🔑 Scan authentifié** : nouveau helper `scanner/core/http.py` qui injecte cookies/headers d'auth depuis le contexte. UI options étendue avec champs Cookies / Bearer / Header custom. Le crawler ET les modules utilisent l'auth.
-- **📡 OOB Collaborator** : `routes/oob.py` (endpoint `/oob/log/<uuid>` + `/oob/check/<uuid>`) et helper `scanner/core/oob.py`. Le module SSRF utilise l'OOB pour confirmer les **blind SSRF** : si le canary est hit dans les 4s après envoi du payload, la vuln est CONFIRMÉE même sans retour visible. Confidence 100%, severity critical.
-- **⏱ SQLi time-based** : module sqli enrichi avec `SLEEP(4)` / `pg_sleep(4)` / `WAITFOR DELAY '0:0:4'`. Mesure baseline + delta. Confirmation si Δ ≥ 3.5s. Couvre les blind SQLi que boolean-based rate.
-- **🔐 SSL/TLS detail module** : analyse via stdlib `ssl` + `socket`. Détecte certif expiré, auto-signé, protocoles obsolètes (SSLv3, TLS 1.0, TLS 1.1), cipher suites faibles (RC4, DES, EXPORT, NULL, MD5).
-- **🌐 GraphQL fuzzer** : détection endpoint (`/graphql`, `/api/graphql`, etc.), introspection activée, suggestions "Did you mean", batching DoS, SQLi via variables typées.
+## ✅ Round 5 — Pro-grade upgrades (5 game-changers)
+- **Scan authentifié** : nouveau helper `scanner/core/http.py` qui injecte cookies/headers d'auth depuis le contexte. UI options étendue avec champs Cookies / Bearer / Header custom. Le crawler ET les modules utilisent l'auth.
+- **OOB Collaborator** : `routes/oob.py` (endpoint `/oob/log/<uuid>` + `/oob/check/<uuid>`) et helper `scanner/core/oob.py`. Le module SSRF utilise l'OOB pour confirmer les **blind SSRF** : si le canary est hit dans les 4s après envoi du payload, la vuln est CONFIRMÉE même sans retour visible. Confidence 100%, severity critical.
+- **SQLi time-based** : module sqli enrichi avec `SLEEP(4)` / `pg_sleep(4)` / `WAITFOR DELAY '0:0:4'`. Mesure baseline + delta. Confirmation si Δ ≥ 3.5s. Couvre les blind SQLi que boolean-based rate.
+- **SSL/TLS detail module** : analyse via stdlib `ssl` + `socket`. Détecte certif expiré, auto-signé, protocoles obsolètes (SSLv3, TLS 1.0, TLS 1.1), cipher suites faibles (RC4, DES, EXPORT, NULL, MD5).
+- **GraphQL fuzzer** : détection endpoint (`/graphql`, `/api/graphql`, etc.), introspection activée, suggestions "Did you mean", batching DoS, SQLi via variables typées.
 
-## ✅ Round 5 (suite — Option B) — 5 dernières features pro-grade
-- **🛡 WAF Detection module** (`waf-detect`) + helper `scanner/core/waf.py` :
+## ✅ Round 5 (suite) — 5 dernières features pro-grade
+- **WAF Detection module** (`waf-detect`) + helper `scanner/core/waf.py` :
   - Identifie Cloudflare / Akamai / AWS WAF / Imperva / Sucuri / F5 / ModSecurity / Barracuda / Fortinet via signatures (headers, server, body)
   - Helper `mutate(payload)` qui génère 7+ variantes (case-mix, URL encoding simple/double, HTML entity, SQL comment injection, tab/newline, null byte) pour bypass simple
   - Met le WAF détecté dans `context["waf"]` pour usage par les autres modules
-- **🏃 Race Conditions module** (`race-conditions`) :
+- **Race Conditions module** (`race-conditions`) :
   - Envoie 8 requêtes parallèles via `ThreadPoolExecutor` sur les forms POST découverts par le crawler
   - Détecte les TOCTOU (coupon stacking, double-spend, multi-vote) quand plus de 50% des req parallèles réussissent
   - Filtre les forms dangereux (logout, delete, password) pour ne pas casser la cible
-- **🌐 Subdomain Enumeration module** (`subdomain-enum`) :
+- **Subdomain Enumeration module** (`subdomain-enum`) :
   - DNS bruteforce parallèle (20 threads) sur 70+ noms communs (api, dev, staging, admin, beta...)
   - Bonus : lookup Certificate Transparency via crt.sh (si internet)
-- **🎚 Scan Profiles** : sélecteur Quick / Standard / Deep / OWASP-only / API / Custom dans Options.
+- **Scan Profiles** : sélecteur Quick / Standard / Deep / OWASP-only / API / Custom dans Options.
   - Quick = passive uniquement (~5 s)
   - Standard = mix équilibré (15 modules)
-  - Deep = TOUS les 25 modules
+  - Deep = tous les modules
   - OWASP = focus Top 10
   - API = focus REST + GraphQL + JWT
   - Le service-worker mappe profile → liste de modules avant /scanner/run
-- **🔗 Chain Detection rules** (4 nouvelles règles dans `inference.py`) :
+- **Chain Detection rules** (4 nouvelles règles dans `inference.py`) :
   - **LFI + log poisoning** : severity escalade à critical (potentiel RCE)
   - **Open Redirect + XSS reflected** : severity escalade à high (phishing crédible)
   - **Subdomain enum + insecure cookie** : severity escalade à high (subdomain takeover)
   - **Missing SRI + Mixed Content** : severity escalade à high (MITM peut injecter JS via CDN)
   - Ces règles **élèvent** la sévérité (les autres l'atténuent) — vraie analyse de risque combiné
 
-## 🟠 Round 6 (souhaitable)
-- **Moteur d'inférence contextuelle** : règles qui valident automatiquement chaque finding (ex: une CSRF n'est pas exploitable si SameSite=Strict)
-- **Catalogue de payloads** (`scanner/payloads/`) versionné, sélection dynamique selon contexte
-- **Subdomain enum** + **technology fingerprinting** (WhatWeb/Wappalyzer-like) côté backend
-- **Sitemap/robots.txt parsing** automatique
-- **Directory bruteforce** avec wordlist
-- **Rate-limiting** intelligent côté scanner pour ne pas tuer la cible
+## ✅ Round 6 — durcissement du moteur
+- **Moteur de matchers déclaratifs** (`scanner/core/matchers.py`) : les payloads du catalogue déclarent leurs conditions (mot-clé, regex, statut, délai) en JSON
+- **Capture d'evidence avec masquage** : requête/réponse conservées sur les findings, en-têtes sensibles redactés (`scanner/core/http.py`)
+- **Propagation de l'authentification** à tous les modules et au crawler
+- **Rate-limiter par hôte** (`rate_limit_per_sec`, défaut 10 req/s) dans le client HTTP commun
+- **Persistance du triage** : statut et note par finding en SQLite, route `PATCH /history/triage/<id>`
 
-## 🔵 Round 5 (R&D)
-- **Moteur de scoring "appris"** : ajustement bayésien du seuil de confiance par type, basé sur le feedback utilisateur ("vrai positif / faux positif" boutons dans l'UI)
-- **Templates de rapports** personnalisables (Markdown → HTML/PDF)
-- **Mode "compare scans"** : diff entre 2 scans avec mise en évidence des régressions
-- **Mode multi-page crawl** (avec puppeteer côté backend)
+## ✅ Round 7 — UI/UX
+- **Onglet Trafic** (requêtes/réponses capturées, triable) et **onglet Surface** (surface découverte par le crawler)
+- **Console d'activité des modules** en direct pendant le scan
+- **Boutons de triage** (faux positif) sur chaque carte
+- **Thème clair** (couleurs de sévérité identiques dans les deux thèmes)
+- **Sélecteur de modules** (onglet Modules) : cocher ou décocher bascule sur le profil Custom
+
+## ✅ Round 8 — rapports
+- **Export SARIF 2.1.0** (CI / GitHub Code Scanning)
+- **Courbe de tendance du risque** par URL (onglet Historique et en-tête du rapport HTML)
+- **Extraits de remédiation** (SQLi, XSS, en-tête manquant, cookie non sécurisé, bibliothèque obsolète)
+- **Résumé exécutif piloté par les données** dans le rapport HTML
+- **Faux positifs exclus des exports** par défaut
+
+## ✅ Profondeur de détection
+- **Catalogues de payloads par palier** `basic` / `extended` / `aggressive` (cumulatifs), mappés depuis le profil de scan (Quick = basic ; Standard et API = extended ; Deep et OWASP = aggressive)
+- **Volume de catalogue** étendu : sqli, lfi, ssrf, xss, command_injection, ssti, nosqli, xxe, header_injection (les modules consomment le catalogue au lieu de listes codées en dur)
+- **XSS** : plusieurs payloads testés par palier, confirmation seulement si le payload sort réellement du contexte (attribut ou chaîne JS)
+
+## ✅ Précision
+- **Command injection** : comparaison à la baseline et vraie signature `whoami`
+- **Requêtes refusées ou échouées jamais comptées comme preuve** (rate-limit, sqli time-based, dir-bruteforce, ssl-tls)
+- **form-fuzzer / json-fuzzer** : signatures vides ignorées, signatures requises absentes de la baseline
+
+## ✅ Budget temps et scans partiels
+- Budget par profil (45 s pour Quick/Standard, 150 s pour Deep/OWASP/API/Custom) ; le crawler s'arrête à l'échéance et les modules non exécutés sont listés
+- **Avertissement de scan partiel** dans le popup et dans les exports
+
+## ✅ Jobs de scan asynchrones
+- `POST` / `GET` / `DELETE /scanner/jobs` ; l'extension interroge toutes les 2 s et affiche la console d'activité en direct
+- **Annulation réelle** au clic sur Stop ; un seul scan à la fois côté extension
+
+## ✅ Confirmation DOM XSS
+- Sonde dans un **onglet caché** (profils deep/owasp/custom, option `domXssConfirm`), preuve de même origine via un attribut marqueur posé sur `<html>`
+
+## ✅ Tests
+- Backend : suite `pytest` (`backend/tests/`)
+- Extension : tests unitaires `node --test` (`npm test` dans `extension/`)
+
+## Prochaines pistes
+- **Confiance apprise** à partir du feedback de triage (vrai / faux positif)
+- **Enrichissement des payloads**
+- **Fingerprinting version → CVE**
+- **Proxy de test manuel**
+- **Vérification de l'extension de bout en bout dans Chrome** (les tests automatisés ne couvrent pas le navigateur réel)
 
 ## ⚠️ Hors-scope assumé
 - **Pentest réseau / port scan** : nécessite des outils dédiés (nmap, masscan) — pas adapté à une extension navigateur

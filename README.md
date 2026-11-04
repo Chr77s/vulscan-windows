@@ -48,37 +48,41 @@ vulnscan-windows/
 │       ├── devtools/         Dashboard (panel.html + panel.js)
 │       ├── popup/            Popup rapide
 │       ├── options/          Page de configuration
-│       └── utils/            constants.js, taxonomy.js (OWASP/CWE/CVSS)
+│       └── utils/            constants.js, taxonomy.js (OWASP/CWE/CVSS),
+│                         job-poller.js, dom-xss-probe.js, export-builders.js
+│   └── tests/                Tests unitaires (node --test)
 │
 ├── backend/                  ← Backend Python Flask (REQUIS)
 │   ├── app.py                Point d'entrée
 │   ├── start.bat/.sh         Lanceurs
+│   ├── tests/                Suite pytest
 │   ├── routes/               Routes HTTP
 │   │   ├── health.py
 │   │   ├── analysis.py       (parse-html, headers, blind-sqli legacy)
+│   │   ├── history.py        historique, diff, tendance, triage
 │   │   ├── augment.py        fetch-headers, cve-check, correlate
-│   │   └── scanner_engine.py /scanner/modules, /scanner/run
+│   │   └── scanner_engine.py /scanner/modules, /scanner/run, /scanner/jobs
 │   └── scanner/              ← Moteur modulaire (Round 1+)
 │       ├── core/
-│       │   ├── engine.py     Auto-découverte + fusion bayésienne
-│       │   └── module_base.py ScannerModule, Finding
-│       └── modules/          ← Détecteurs
-│           ├── headers.py
-│           ├── sqli.py
-│           ├── xss.py
-│           └── info_disclosure.py
+│       │   ├── engine.py     Auto-découverte, budget temps, fusion bayésienne
+│       │   ├── jobs.py       Jobs de scan asynchrones (progression, annulation)
+│       │   ├── http.py       Client HTTP commun (auth, rate-limit par hôte, evidence masquée)
+│       │   ├── matchers.py   Matchers déclaratifs
+│       │   └── crawler.py, inference.py, oob.py, waf.py, module_base.py
+│       ├── payloads/         Catalogues JSON par palier basic/extended/aggressive
+│       └── modules/          ← Détecteurs (un fichier par module, voir tableau)
 │
 ├── test-site/                Site statique (JuiceCorp)
 ├── WebLab/                   ← Lab PHP+MySQL (WAMP)
 ├── ALGORITHME.md             Comment marche le scoring bayésien
-├── ROADMAP.md                Rounds suivants
+├── ROADMAP.md                Rounds livrés et pistes
 └── README.md                 ← Vous êtes ici
 ```
 
 ## Pipeline de scan
 
 ```
-1. User clic "▶ Scan"
+1. User clic "▶ Scan" (refusé si un scan est déjà en cours)
        ↓
 2. Service worker vérifie GET /health (sinon abandon avec erreur claire)
        ↓
@@ -90,16 +94,24 @@ vulnscan-windows/
    - POST /analysis/fetch-headers   ← vrais headers HTTP serveur
    - POST /analysis/cve-check       ← base CVE locale (jQuery/Angular/Lodash/Moment)
    - POST /analysis/correlate       ← scoring bayésien des signaux
-   - Optionnel : POST /scanner/run  ← moteur modulaire (modules personnalisés)
        ↓
-5. Service worker enrichit chaque finding via taxonomy.js (OWASP/CWE/CVSS)
+5. Phase C — Moteur modulaire en job asynchrone
+   - POST /scanner/jobs (profil → modules, profondeur de payloads, budget temps)
+   - Sondage GET /scanner/jobs/<id> toutes les 2 s → console d'activité en direct
+   - Stop = DELETE /scanner/jobs/<id> (annulation réelle)
+   - Budget dépassé : modules non exécutés listés, scan marqué partiel
        ↓
-6. Diffusion VULN_FOUND → panel affiche en cartes pliables
+6. Phase D — Confirmation DOM XSS (profils deep/owasp/custom, option domXssConfirm)
+   - Sonde dans un onglet caché, preuve de même origine via un attribut marqueur
        ↓
-7. Export possible : JSON, CSV, HTML, XML, PDF (impression)
+7. Le service worker enrichit chaque finding via taxonomy.js (OWASP/CWE/CVSS)
+       ↓
+8. Diffusion VULN_FOUND → panel affiche en cartes pliables (triage faux positif possible)
+       ↓
+9. Export : JSON, CSV, HTML, XML, SARIF 2.1.0, PDF (impression) — faux positifs exclus
 ```
 
-## Détecteurs disponibles (Round 1)
+## Détecteurs disponibles
 
 | Module | Côté | Type | Statut |
 |---|---|---|---|
@@ -114,17 +126,20 @@ vulnscan-windows/
 | `clickjacking` | client | absence X-Frame-Options HTML | ✅ |
 | `sensitive-data` | client | API keys, JWT, paths, emails | ✅ |
 | `headers` | backend | vrais headers HTTP / qualité CSP | ✅ |
-| `sqli` (error + blind boolean) | backend | injection SQL passive/semi-active | ✅ |
-| `xss` (reflected via reflection marker) | backend | XSS réfléchi | ✅ |
+| `sqli` (error + boolean + time-based) | backend | injection SQL, payloads par palier de profondeur | ✅ |
+| `xss` (reflected) | backend | XSS réfléchi : plusieurs payloads par palier, sortie de contexte exigée |
+| DOM XSS confirm | extension | confirmation dans un onglet caché (deep/owasp/custom) | ✅ | ✅ |
 | `info-disclosure` (BeautifulSoup) | backend | secrets, stack traces, etc. | ✅ |
 | `lfi` | backend | path traversal + signatures /etc/passwd | ✅ |
 | `ssrf` | backend | params URL-like, payloads loopback/file:// | ✅ |
-| `command-injection` | backend | séparateurs shell sur params suspects | ✅ |
+| `command-injection` | backend | séparateurs shell, comparaison à la baseline + signature `whoami` | ✅ |
 | `open-redirect` | backend | redirection 3xx vers canary externe | ✅ |
 | `idor` | backend | id-walk heuristique sur params numériques | ✅ |
 | `jwt-analysis` | backend | alg=none + dico HS256 + exp | ✅ |
 | `cors-misconfig` | backend | origine réfléchie / `*` + credentials | ✅ |
-| `xxe` | backend | DOCTYPE + ENTITY SYSTEM file:// | ✅ |
+| `xxe` | backend | DOCTYPE + ENTITY SYSTEM file:// (plusieurs variantes) | ✅ |
+| `ssti` | backend | injection de template (évaluation arithmétique) | ✅ |
+| `nosqli` | backend | injection NoSQL (opérateurs `$gt`, `$ne`, `$in`…) | ✅ |
 | `dir-bruteforce` | backend | wordlist + content signature (rate-limited 5 req/s) | ✅ |
 | `tech-fingerprint` | backend | CMS, langage, server via headers+HTML+cookies | ✅ |
 | `file-exposure` | backend | .git/HEAD, .env, swagger.json, phpinfo (signature contenu) | ✅ |
@@ -141,7 +156,7 @@ vulnscan-windows/
 | `waf-detect` | backend | identifie Cloudflare/Akamai/AWS WAF + helper de mutation pour bypass | ✅ |
 | `race-conditions` | backend | TOCTOU via N requêtes parallèles sur forms POST | ✅ |
 | `subdomain-enum` | backend | DNS bruteforce + crt.sh Certificate Transparency | ✅ |
-| **Scan profiles** | extension | Quick / Standard / Deep / OWASP / API / Custom | ✅ |
+| **Scan profiles** | extension | Quick / Standard / Deep / OWASP / API / Custom : modules, profondeur de payloads, budget temps | ✅ |
 | **Chain detection** | inference | 4 règles d'élévation : LFI+log, OR+XSS, sub+cookie, SRI+mixed | ✅ |
 
 ## Tester
@@ -152,10 +167,21 @@ vulnscan-windows/
 4. Aller sur le site, F12 → VulnScan → Lancer un scan
 5. Tu devrais voir 20-40 vulnérabilités selon la page, chacune avec son score CVSS, CWE, OWASP, et un panneau pliable contenant tout le détail
 
+### Tests automatisés
+```bash
+# Backend
+cd backend && python -m pytest tests/      # ou run_tests.bat sous Windows
+
+# Extension
+cd extension && npm test                   # node --test
+```
+Ils ne remplacent pas une vérification manuelle dans Chrome.
+
 ## Export multi-format
 
 Bouton dans la status bar :
 - **JSON** : format complet, parsable, conserve tous les champs
+- **SARIF** : 2.1.0, pour la CI et GitHub Code Scanning
 - **XML** : conforme, avec CDATA pour les preuves
 - **CSV** : pour import Excel (BOM UTF-8)
 - **HTML** : rapport stylé avec résumé exécutif et KPIs
