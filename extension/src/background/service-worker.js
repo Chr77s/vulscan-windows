@@ -14,7 +14,7 @@ import { buildDomProbes, runDomProbes, domFindingFromHit } from "../utils/dom-xs
 // ---- État global ----
 let currentScan = null;
 let startingScan = false; // vrai entre l'entrée dans startScan et la pose de currentScan
-const SCAN_STALE_MS = 300000; // > budget max 150 s + poll 30 s
+const SCAN_STALE_MS = 300000; // > pire cas ~250 s : budget max 150 s + poll 30 s + phase DOM ~46 s (40 s + sonde en vol)
 let stopPending = false; // vrai tant que stopScan attend la fin de la phase active
 let activeRun = null; // { backendUrl, done } de la phase active en cours (voir stopScan)
 let backendStatus = { available: false, lastChecked: 0, version: null, error: null };
@@ -82,6 +82,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 // Au (re)démarrage du worker : un job resté dans la session est orphelin (le scan qui le suivait
 // est perdu avec l'ancienne instance) -> on l'annule pour libérer son slot backend.
+(async () => {
+  try { // fenêtre de sonde DOM laissée par un worker tué en cours de phase
+    const { domProbeWindowId } = await chrome.storage.session.get("domProbeWindowId");
+    if (domProbeWindowId != null) {
+      await chrome.windows.remove(domProbeWindowId).catch(() => {});
+      await chrome.storage.session.remove("domProbeWindowId");
+    }
+  } catch (e) { console.warn("[VulnScan] fenêtre de sonde orpheline :", e.message); }
+})();
 (async () => {
   try {
     const { activeScanJob } = await chrome.storage.session.get("activeScanJob");
@@ -530,16 +539,22 @@ async function runActiveModules(cfg, url) {
 // =====================================================
 const DOM_LOAD_CAP_MS = 4000, DOM_SETTLE_MS = 600, DOM_PROBE_HARD_MS = 5600; // 4000 + 600 + 1000 de marge
 
-// Ne rejette jamais et se résout toujours en <= DOM_PROBE_HARD_MS ; vrai ssi le jeton est posé sur <html>.
-async function checkProbeInTab(tabId, probe) {
-  let onUpdated, hardTimer, loadTimer;
+// Ne rejette jamais et se résout toujours en <= DOM_PROBE_HARD_MS ; vrai ssi le jeton est posé sur <html>
+// ET la page lue est bien de l'origine scannée (une redirection vers un autre site ne prouve rien).
+async function checkProbeInTab(tabId, probe, scannedOrigin) {
+  let onUpdated, hardTimer, loadTimer, settled = false;
   const attempt = (async () => {
     // Un changement de fragment seul ne recharge pas la page : repasser par about:blank.
-    if (probe.param === "#hash") await chrome.tabs.update(tabId, { url: "about:blank" });
+    if (probe.param === "#hash") {
+      await chrome.tabs.update(tabId, { url: "about:blank" });
+      if (settled) return false;
+    }
     await new Promise((resolve) => {
-      let sawLoading = false; // ignore le « complete » résiduel de la page précédente
-      onUpdated = (id, info) => {
-        if (id !== tabId) return;
+      let sawLoading = false;
+      onUpdated = (id, info, tab) => {
+        if (id !== tabId || settled) return;
+        // Les événements d'about:blank (page précédente) ne comptent pas.
+        if (tab?.url === "about:blank" || tab?.pendingUrl === "about:blank") return;
         if (info.status === "loading") sawLoading = true;
         else if (info.status === "complete" && sawLoading) resolve();
       };
@@ -547,17 +562,20 @@ async function checkProbeInTab(tabId, probe) {
       loadTimer = setTimeout(resolve, DOM_LOAD_CAP_MS);
       chrome.tabs.update(tabId, { url: probe.probeUrl }).catch(resolve);
     });
+    if (settled) return false;
     await new Promise((res) => setTimeout(res, DOM_SETTLE_MS));
+    if (settled) return false;
     const [res] = await chrome.scripting.executeScript({
       target: { tabId },
-      func: () => document.documentElement.getAttribute("data-vulnscan-hit"),
+      func: () => ({ hit: document.documentElement.getAttribute("data-vulnscan-hit"), origin: location.origin }),
     });
-    return res?.result === probe.token;
+    return res?.result?.hit === probe.token && res.result.origin === scannedOrigin;
   })().catch(() => false);
   const hard = new Promise((res) => { hardTimer = setTimeout(() => res(false), DOM_PROBE_HARD_MS); });
   try {
     return await Promise.race([attempt, hard]);
   } finally {
+    settled = true;
     clearTimeout(hardTimer); clearTimeout(loadTimer);
     if (onUpdated) chrome.tabs.onUpdated.removeListener(onUpdated);
   }
@@ -577,16 +595,17 @@ async function runDomXssPhase(url, scan, stopped) {
       console.warn("[VulnScan] DOM XSS : fenêtre impossible :", e.message);
       return { module: "dom-xss", findings: 0, elapsedMs: 0, status: "error", error: e.message };
     }
+    try { await chrome.storage.session.set({ domProbeWindowId: win.id }); } catch { /* best effort */ }
     const tabId = win.tabs?.[0]?.id;
     if (tabId == null) return { module: "dom-xss", findings: 0, elapsedMs: 0, status: "error", error: "onglet de sonde introuvable" };
     const hits = await runDomProbes({
-      probes, check: (p) => checkProbeInTab(tabId, p),
+      probes, check: (p) => checkProbeInTab(tabId, p, new URL(url).origin),
       now: () => Date.now(), budgetMs: 40000, isStopped: stopped,
     });
     let n = 0;
     if (!stopped()) {
       for (const hit of hits) {
-        const enriched = ensureFinding(domFindingFromHit(hit), url);
+        const enriched = ensureFinding(domFindingFromHit(hit, url), url);
         scan.vulnerabilities.push(enriched);
         broadcastMessage({ type: "VULN_FOUND", payload: enriched });
         n++;
@@ -594,7 +613,10 @@ async function runDomXssPhase(url, scan, stopped) {
     }
     return { module: "dom-xss", findings: n, elapsedMs: Date.now() - t0 };
   } finally {
-    if (win?.id != null) { try { await chrome.windows.remove(win.id); } catch { /* déjà fermée */ } }
+    if (win?.id != null) {
+      try { await chrome.windows.remove(win.id); } catch { /* déjà fermée */ }
+      try { await chrome.storage.session.remove("domProbeWindowId"); } catch { /* best effort */ }
+    }
   }
 }
 

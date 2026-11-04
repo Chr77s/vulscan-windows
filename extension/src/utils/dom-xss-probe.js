@@ -41,7 +41,7 @@ export async function runDomProbes({ probes, check, now, budgetMs = 40000, isSto
   return hits;
 }
 
-export function domFindingFromHit(hit) {
+export function domFindingFromHit(hit, scannedUrl) {
   return {
     type: "xss",
     title: "DOM XSS confirmée — exécution observée",
@@ -51,8 +51,10 @@ export function domFindingFromHit(hit) {
     source: "extension:dom-xss",
     parameter: hit.param,
     payload: hit.payload,
-    url: hit.probeUrl,
-    evidence: `Le payload a posé data-vulnscan-hit=${hit.token} sur <html> (contexte ${hit.context})`,
+    url: scannedUrl, // stable key for rescan diffs; the probe URL (random token) goes in evidence
+    evidence: `Le payload a posé data-vulnscan-hit=${hit.token} sur <html> (contexte ${hit.context}) — URL de sonde : ${hit.probeUrl}`,
+    description: "La valeur du paramètre atteint un puits DOM exécutable : le payload s'est exécuté dans un vrai onglet du navigateur (preuve observée, pas une simple réflexion).",
+    recommendation: "Encoder la donnée selon le contexte du puits, utiliser textContent plutôt qu'innerHTML, éviter eval et document.write avec des données issues de l'URL, et déployer une Content-Security-Policy restrictive.",
     cwe: "CWE-79",
     owasp: "A03:2021",
   };

@@ -93,7 +93,11 @@ test("throwing check counts as not confirmed", async () => {
 
 test("finding has the spec fields and copy", () => {
   const hit = { param: "#hash", context: "html", token: "TK", payload: "PL", probeUrl: "https://x.test/#PL" };
-  assert.deepEqual(domFindingFromHit(hit), {
+  const f = domFindingFromHit(hit, "https://x.test/");
+  assert.match(f.description, /DOM/);
+  assert.match(f.recommendation, /textContent/);
+  delete f.description; delete f.recommendation;
+  assert.deepEqual(f, {
     type: "xss",
     title: "DOM XSS confirmée — exécution observée",
     severity: "high",
@@ -102,8 +106,8 @@ test("finding has the spec fields and copy", () => {
     source: "extension:dom-xss",
     parameter: "#hash",
     payload: "PL",
-    url: "https://x.test/#PL",
-    evidence: "Le payload a posé data-vulnscan-hit=TK sur <html> (contexte html)",
+    url: "https://x.test/",
+    evidence: "Le payload a posé data-vulnscan-hit=TK sur <html> (contexte html) — URL de sonde : https://x.test/#PL",
     cwe: "CWE-79",
     owasp: "A03:2021",
   });
