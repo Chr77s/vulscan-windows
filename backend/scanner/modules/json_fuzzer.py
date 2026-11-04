@@ -138,7 +138,7 @@ class JsonFuzzerModule(ScannerModule):
                 # 2. SQLi / NoSQLi — signatures d'erreur
                 if payload_def["type"] in ("sqli", "nosqli"):
                     for sig in self.SQL_ERROR:
-                        if sig.search(body):
+                        if sig.search(body) and not sig.search(body_base):  # déjà dans la baseline = pas une preuve
                             findings.append(Finding(
                                 type=payload_def["type"], severity="critical",
                                 title=f"{payload_def['type'].upper()} via JSON API — clé '{key}'",
@@ -158,9 +158,10 @@ class JsonFuzzerModule(ScannerModule):
                             break
 
                 # 3. LFI
-                if payload_def["type"] == "lfi":
-                    sig = re.search(payload_def["key_signal"], body)
-                    if sig:
+                lfi_sig = payload_def.get("key_signal")
+                if payload_def["type"] == "lfi" and lfi_sig:  # signature vide = matcherait tout
+                    sig = re.search(lfi_sig, body)
+                    if sig and not re.search(lfi_sig, body_base):
                         findings.append(Finding(
                             type="path-traversal", severity="critical",
                             title=f"LFI via JSON API — clé '{key}'",

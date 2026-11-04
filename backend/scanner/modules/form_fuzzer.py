@@ -133,14 +133,15 @@ class FormFuzzerModule(ScannerModule):
                 # 2. SQLi — signatures d'erreur
                 if payload_def.get("expects_error"):
                     for sig in self.SQL_ERROR_PATTERNS:
-                        if sig.search(r):
+                        if sig.search(r) and not sig.search(baseline):  # déjà dans la baseline = pas une preuve
                             findings.append(self._build_sqli(action, method, field, payload_str, sig.search(r).group(0)))
                             break
 
                 # 3. LFI — signatures de fichier
-                if payload_def["type"] == "lfi":
-                    sig = re.search(payload_def["signature_in_response"], r)
-                    if sig:
+                lfi_sig = payload_def.get("signature_in_response")
+                if payload_def["type"] == "lfi" and lfi_sig:  # signature vide = matcherait tout
+                    sig = re.search(lfi_sig, r)
+                    if sig and not re.search(lfi_sig, baseline):
                         findings.append(self._build_lfi(action, method, field, payload_str, sig.group(0)))
                         break
 

@@ -693,3 +693,88 @@ def test_ssl_tls_handshake_error_still_reported(mocker):
                         side_effect=ssl.SSLError("tlsv1 alert protocol version"))
     findings = SslTlsModule().scan("https://a/", {})
     assert [f.detection_method for f in findings] == ["tls-handshake-failure"]
+
+
+# --- form_fuzzer / json_fuzzer : précision (signature vide, baseline différentielle) ---
+
+_SQL_ERR = "You have an error in your SQL syntax near x"
+_EMPTY_SIG_LFI = [{"payload": "php://filter/x", "signature": ""}]
+
+
+def _ff_scan(mocker, body_for, lfi_catalog=()):
+    """body_for(valeur_du_champ) -> texte ; la baseline envoie la valeur "test"."""
+    from scanner.modules.form_fuzzer import FormFuzzerModule
+    import scanner.modules.form_fuzzer as ff_mod
+
+    mocker.patch.object(ff_mod, "get_payloads",
+                        side_effect=lambda fam, **kw: list(lfi_catalog) if fam == "lfi" else [])
+    mocker.patch("scanner.core.http.post",
+                 side_effect=lambda url, ctx, data=None, **kw: mocker.Mock(text=body_for(data["q"])))
+    form = {"action": "http://a/s", "method": "POST",
+            "fields": [{"name": "q", "type": "text", "value": ""}]}
+    return FormFuzzerModule().scan("http://a", {"crawled": {"forms": [form]}})
+
+
+def _jf_scan(mocker, body_for, lfi_catalog=(), baseline_fails=False):
+    from scanner.modules.json_fuzzer import JsonFuzzerModule
+    import scanner.modules.json_fuzzer as jf_mod
+
+    mocker.patch.object(jf_mod, "get_payloads",
+                        side_effect=lambda fam, **kw: list(lfi_catalog) if fam == "lfi" else [])
+
+    def fake_post(url, ctx, json=None, **kw):
+        if baseline_fails and json.get("value") == "baseline" and json.get("name") == "test":
+            return None
+        vals = [v for k, v in json.items() if (k, v) not in (("id", 1), ("name", "test"), ("value", "baseline"))]
+        return mocker.Mock(status_code=200, text=body_for(vals[0] if vals else None))
+
+    mocker.patch("scanner.core.http.post", side_effect=fake_post)
+    return JsonFuzzerModule().scan("http://a/api/x", {"crawled": {"api_endpoints": ["http://a/api/x"]}})
+
+
+def test_form_fuzzer_empty_signature_never_matches(mocker):
+    assert _ff_scan(mocker, lambda v: "plain page", _EMPTY_SIG_LFI) == []
+
+
+def test_form_fuzzer_sql_error_in_baseline_is_not_a_finding(mocker):
+    assert _ff_scan(mocker, lambda v: _SQL_ERR) == []
+
+
+def test_form_fuzzer_sql_error_only_after_payload_is_a_finding(mocker):
+    out = _ff_scan(mocker, lambda v: _SQL_ERR if "'" in v else "ok")
+    assert any(f.type == "sqli" for f in out)
+
+
+def test_form_fuzzer_passwd_only_after_payload_is_a_finding(mocker):
+    out = _ff_scan(mocker, lambda v: "root:x:0:0:root:/root" if "etc/passwd" in v else "ok")
+    assert any(f.type == "path-traversal" for f in out)
+
+
+def test_form_fuzzer_passwd_in_baseline_is_not_a_finding(mocker):
+    assert _ff_scan(mocker, lambda v: "root:x:0:0:root:/root") == []
+
+
+def test_json_fuzzer_empty_signature_never_matches(mocker):
+    assert _jf_scan(mocker, lambda v: "{}", _EMPTY_SIG_LFI) == []
+
+
+def test_json_fuzzer_sql_error_in_baseline_is_not_a_finding(mocker):
+    assert _jf_scan(mocker, lambda v: _SQL_ERR) == []
+
+
+def test_json_fuzzer_sql_error_only_after_payload_is_a_finding(mocker):
+    out = _jf_scan(mocker, lambda v: _SQL_ERR if isinstance(v, str) and "'" in v else "{}")
+    assert any(f.type == "sqli" for f in out)
+
+
+def test_json_fuzzer_passwd_only_after_payload_is_a_finding(mocker):
+    out = _jf_scan(mocker, lambda v: "root:x:0:0:root" if isinstance(v, str) and "etc/passwd" in v else "{}")
+    assert any(f.type == "path-traversal" for f in out)
+
+
+def test_json_fuzzer_passwd_in_baseline_is_not_a_finding(mocker):
+    assert _jf_scan(mocker, lambda v: "root:x:0:0:root") == []
+
+
+def test_json_fuzzer_baseline_failure_gives_no_signature_finding(mocker):
+    assert _jf_scan(mocker, lambda v: _SQL_ERR + " root:x:0:0:", baseline_fails=True) == []
