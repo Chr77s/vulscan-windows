@@ -123,11 +123,17 @@ function setScanningUI(scanning) {
   btn.textContent = scanning ? "⏹ Arreter le scan" : "▶ Lancer un scan";
   btn.classList.toggle("running", scanning);
   bar.classList.toggle("visible", scanning);
-  if (!scanning) {
+  const txt = document.getElementById("progressPct");
+  if (scanning) {
+    document.getElementById("progressFill").style.width = "0%";
+    if (txt) txt.textContent = "0%";
+  } else {
     document.getElementById("progressFill").style.width = "100%";
+    if (txt) txt.textContent = "100%";
     setTimeout(() => {
       bar.classList.remove("visible");
       document.getElementById("progressFill").style.width = "0%";
+      if (txt) txt.textContent = "";
     }, 1000);
   }
 }
@@ -135,6 +141,8 @@ function setScanningUI(scanning) {
 function updateProgress(current, total) {
   const pct = total > 0 ? Math.round((current / total) * 100) : 0;
   document.getElementById("progressFill").style.width = pct + "%";
+  const txt = document.getElementById("progressPct");
+  if (txt) txt.textContent = pct + "%";
 }
 
 function displayResults(vulnerabilities) {

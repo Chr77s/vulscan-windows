@@ -198,9 +198,12 @@ function setupRuntimeListeners() {
       loadHistory();
     }
     if (message.type === "SCAN_PROGRESS") {
-      const stage = message.payload?.stage || "";
-      const pct = stage === "passive" ? 35 : stage === "backend" ? 75 : 50;
-      setScanProgress(message.payload?.label || "Scan...", pct);
+      const p = message.payload || {};
+      // Pourcentage réel fourni par le service-worker (current/total) ; sinon repli sur le stage.
+      const pct = Number.isFinite(p.total) && p.total > 0
+        ? Math.round((p.current / p.total) * 100)
+        : (p.stage === "passive" ? 35 : p.stage === "backend" ? 75 : 50);
+      setScanProgress(p.label || "Scan...", pct);
     }
     if (message.type === "SCAN_ERROR") {
       setScanningState(false);

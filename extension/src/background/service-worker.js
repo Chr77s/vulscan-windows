@@ -14,7 +14,7 @@ import { buildDomProbes, runDomProbes, domFindingFromHit } from "../utils/dom-xs
 // ---- État global ----
 let currentScan = null;
 let startingScan = false; // vrai entre l'entrée dans startScan et la pose de currentScan
-const SCAN_STALE_MS = 300000; // > pire cas ~250 s : budget max 150 s + poll 30 s + phase DOM ~46 s (40 s + sonde en vol)
+const SCAN_STALE_MS = 360000; // > pire cas ~336 s : budget max 260 s + poll 30 s + phase DOM ~46 s (40 s + sonde en vol)
 let stopPending = false; // vrai tant que stopScan attend la fin de la phase active
 let activeRun = null; // { backendUrl, done } de la phase active en cours (voir stopScan)
 let backendStatus = { available: false, lastChecked: 0, version: null, error: null };
@@ -224,7 +224,7 @@ async function startScan(tabId, url) {
 
   console.log("[VulnScan] Scan démarré sur " + url + " (backend v" + backendStatus.version + ")");
   updateBadge("scanning");
-  broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "passive", label: "Analyse passive du DOM..." } });
+  broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "passive", current: 5, total: 100, label: "Analyse passive du DOM..." } });
 
   // 3. Phase A — analyse passive côté navigateur (content-script)
   let clientResult = { vulnerabilities: [], context: {} };
@@ -248,7 +248,7 @@ async function startScan(tabId, url) {
   }
 
   // 4. Phase B — augmentation backend (passive : headers, CVE, info-disclosure)
-  broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "backend", label: "Augmentation backend (en-têtes, CVE, corrélation)..." } });
+  broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "backend", current: 12, total: 100, label: "Augmentation backend (en-têtes, CVE, corrélation)..." } });
   try {
     const backendVulns = await augmentViaBackend(cfg, url, clientResult);
     if (stopped()) return { success: true };
@@ -266,7 +266,7 @@ async function startScan(tabId, url) {
 
   // 5. Phase C — TESTS ACTIFS (sqli, xss, lfi, ssrf, etc.) si activés
   if (cfg.activeEnabled) {
-    broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "active", label: "Tests actifs (injections) en cours..." } });
+    broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "active", current: 15, total: 100, label: "Tests actifs (injections) en cours..." } });
     // activeRun : permet à stopScan d'attendre le résultat partiel avant de finaliser.
     let endActiveRun;
     activeRun = { scan, stopRequested: false, backendUrl: cfg.backendUrl, done: new Promise((res) => { endActiveRun = res; }) };
@@ -295,7 +295,7 @@ async function startScan(tabId, url) {
 
   // 5b. Phase D — confirmation DOM XSS dans un onglet caché (profils profonds uniquement)
   if (cfg.activeEnabled && ["deep", "owasp", "custom"].includes(cfg.scanProfile) && cfg.domXssConfirm !== false) {
-    broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "dom-xss", label: "Confirmation DOM XSS (onglet caché)..." } });
+    broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "dom-xss", current: 92, total: 100, label: "Confirmation DOM XSS (onglet caché)..." } });
     const line = await runDomXssPhase(url, scan, stopped);
     if (!stopped()) {
       scan.moduleLog = [...(scan.moduleLog || []), line];
@@ -391,7 +391,7 @@ const DEPTH_FOR_PROFILE = {
 
 // Budget temps (secondes) envoyé au backend par profil ; inconnu => 45.
 const TIME_BUDGET_FOR_PROFILE = {
-  quick: 45, standard: 45, deep: 150, owasp: 150, api: 150, custom: 150,
+  quick: 45, standard: 45, deep: 260, owasp: 260, api: 260, custom: 260,
 };
 
 // Mapping des 5 anciennes cases "Tests actifs" (Options) vers des noms de module.
@@ -498,14 +498,26 @@ async function runActiveModules(cfg, url) {
   };
   const cancelJob = (jobId) => cancelBackendJob(cfg.backendUrl, jobId);
 
+  // Progression : la phase active occupe 15 % -> 88 % de la barre globale, répartis
+  // sur le nombre de modules planifiés (une entrée moduleLog par module, skip compris).
+  let doneModules = 0;
+  const totalModules = enabled.length || 1;
   try {
     const { status, result, moduleLog } = await pollScanJob({
       startJob, getJob, cancelJob,
       sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
       now: () => Date.now(),
       onProgress: (entries) => {
-        try { if (live()) broadcastMessage({ type: "MODULE_LOG", payload: entries }); }
-        catch (e) { console.warn("[VulnScan] onProgress :", e.message); }
+        try {
+          if (!live()) return;
+          broadcastMessage({ type: "MODULE_LOG", payload: entries });
+          doneModules += entries.length;
+          const pct = Math.min(88, 15 + Math.round((doneModules / totalModules) * 73));
+          broadcastMessage({ type: "SCAN_PROGRESS", payload: {
+            stage: "active", current: pct, total: 100,
+            label: `Tests actifs — ${doneModules}/${totalModules} modules`,
+          } });
+        } catch (e) { console.warn("[VulnScan] onProgress :", e.message); }
       },
       // Appel d'API extension toutes les 2 s : réarme aussi le minuteur d'inactivité du worker.
       onTick: (jobId) => {

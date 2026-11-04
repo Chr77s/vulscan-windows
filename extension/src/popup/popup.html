@@ -21,6 +21,8 @@
     .progress-bar { display:none; height:3px; background:#1e293b; margin:0 14px 10px; border-radius:2px; overflow:hidden; }
     .progress-bar.visible { display:block; }
     .progress-fill { height:100%; width:0%; background:#4f46e5; transition:width 0.3s; }
+    .progress-pct { display:none; text-align:center; font-size:12px; color:#cbd5e1; margin:-6px 14px 8px; font-variant-numeric:tabular-nums; }
+    .progress-bar.visible + .progress-pct { display:block; }
 
     .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; padding:0 14px 14px; }
     .stat-card { background:#1e293b; border-radius:6px; padding:8px 4px; text-align:center; }
@@ -100,6 +102,7 @@
   <div class="progress-bar" id="progressBar">
     <div class="progress-fill" id="progressFill"></div>
   </div>
+  <div class="progress-pct" id="progressPct"></div>
   <div class="stats">
     <div class="stat-card"><div class="count critical" id="countCritical">0</div><div class="label">Critique</div></div>
     <div class="stat-card"><div class="count high"     id="countHigh">0</div><div class="label">Eleve</div></div>
