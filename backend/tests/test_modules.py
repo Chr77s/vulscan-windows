@@ -778,3 +778,30 @@ def test_json_fuzzer_passwd_in_baseline_is_not_a_finding(mocker):
 
 def test_json_fuzzer_baseline_failure_gives_no_signature_finding(mocker):
     assert _jf_scan(mocker, lambda v: _SQL_ERR + " root:x:0:0:", baseline_fails=True) == []
+
+
+
+# Faux positif réel observé sur ginandjuice.shop ; chaînes construites via chr()
+# pour éviter toute ambiguïté d'échappement dans la source du test.
+_BS = chr(92)   # antislash \
+_Q = chr(39)    # guillemet '
+
+
+def test_xss_escaped_quote_in_js_string_does_not_confirm():
+    """Le payload ';alert(1);// reflété en  var x = '\';alert(1);//';  — le guillemet
+    d'évasion est échappé par un antislash, la chaîne JS ne se referme pas, rien ne
+    s'exécute. Ne doit PAS être confirmé comme XSS."""
+    from scanner.modules.xss import XssModule
+    payload = _Q + ";alert(1);//"
+    body = "<script> var searchText = " + _Q + _BS + payload + _Q + "; </script>"
+    assert payload in body                       # reflété verbatim en sous-chaîne
+    assert _BS + _Q in body                      # mais le guillemet est bien échappé
+    assert XssModule._breaks_context(body, payload) is False
+
+
+def test_xss_unescaped_quote_breakout_still_confirms():
+    """Contrôle : un guillemet NON échappé casse la chaîne JS -> toujours confirmé."""
+    from scanner.modules.xss import XssModule
+    payload = _Q + ";alert(1);//"
+    body = "<script> var searchText = " + _Q + payload + _Q + "; </script>"
+    assert XssModule._breaks_context(body, payload) is True

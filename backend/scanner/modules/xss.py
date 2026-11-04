@@ -158,6 +158,13 @@ class XssModule(ScannerModule):
         idx = body.find(payload_value)
         if idx == -1:
             return False
+        # Un nombre impair d'antislashs juste avant le payload échappe son 1er caractère :
+        # ';alert(1);// reflété en \';alert(1);// reste prisonnier de la chaîne JS (faux
+        # positif observé sur ginandjuice.shop). Le guillemet d'évasion n'a alors rien cassé.
+        if payload_value[:1] in ("'", '"'):
+            nbs = len(body[:idx]) - len(body[:idx].rstrip("\\"))
+            if nbs % 2 == 1:
+                return False
         before = body[max(0, idx - 80):idx]
         quote_match = re.search(r'=\s*(["\'])$', before)
         if not quote_match:
