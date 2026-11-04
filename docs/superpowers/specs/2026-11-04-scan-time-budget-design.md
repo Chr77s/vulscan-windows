@@ -26,14 +26,17 @@ A scan always returns what it found within its time budget, and says which modul
 
 Paths that bypass `http.send` (`ssl_tls` sockets, `subdomain_enum` DNS/crt.sh, `oob` polling) are bounded only by the between-module check: a module that starts just before the deadline can overrun by its own internal maximum (~15 s). This is why the extension's abort is set 15 s above the budget. Mark this with a `shortcut:` comment in the engine.
 
+Each module declares `min_time_to_start_s` (default 0; `ssl_tls` 30 s, `subdomain_enum` 25 s): when a deadline exists, the engine skips a module whose worst-case duration outside `http.send` exceeds the time left, with the same `skipped` log entry.
+
 ### API
 
 `routes/scanner_engine.py::_module_log_entry` exposes `status: "skipped"` and `reason` the same way it already exposes `status: "error"`. No other response field changes.
 
 ### Extension
 
-- `service-worker.js`: a `TIME_BUDGET_FOR_PROFILE` map next to `DEPTH_FOR_PROFILE` — `quick`/`standard`: 45 s; `deep`/`owasp`/`api`/`custom`: 150 s; unknown profile: 45 s. Send `context.time_budget_s`; set the fetch abort to `(budget + 15) * 1000` ms. 165 s stays under the MV3 five-minute limit for a single in-flight request.
+- `service-worker.js`: a `TIME_BUDGET_FOR_PROFILE` map next to `DEPTH_FOR_PROFILE` — `quick`/`standard`: 45 s; `deep`/`owasp`/`api`/`custom`: 150 s; unknown profile: 45 s. Send `context.time_budget_s`; set the fetch abort to `(budget + 15) * 1000` ms. Chrome's documented termination conditions for an extension service worker include "When a fetch() response takes more than 30 seconds to arrive" (developer.chrome.com, service-worker lifecycle, read 2026-11-04); the page does not say whether this covers fetches the worker itself makes. If it does, any `/scanner/run` call slower than 30 s is at risk with or without this branch (it already was at 60 s). Resolution is out of scope here: an asynchronous job API (start with POST, poll with short GETs) is the planned follow-up.
 - `panel.js::formatModuleLogLine`: a skipped entry renders as `⏱ <module> — non exécuté (budget temps atteint)`. When at least one entry is skipped, the activity console's first line says `Scan partiel : N module(s) non exécuté(s) faute de temps — relancez avec un profil plus ciblé.`
+- Popup and exported reports: when `moduleLog` has a skipped entry, the popup and the HTML/PDF report show `Scan partiel : N module(s) non exécuté(s) faute de temps — ce rapport ne couvre pas toute la surface testée.` (SARIF/XML carry a `skippedModules` marker), so a partial scan is never handed over as clean.
 
 ## Error handling
 
