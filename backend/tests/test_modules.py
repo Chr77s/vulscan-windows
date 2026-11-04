@@ -565,3 +565,83 @@ def test_command_injection_confirms_windows_whoami_output(mocker):
 
 def test_command_injection_skips_param_when_baseline_fails(mocker):
     assert _cmdi_scan(mocker, lambda v: "uid=0(root)", baseline_fails=True) == []
+
+
+# --- une requête refusée (deadline) ou échouée n'est jamais une preuve ---
+
+def test_rate_limit_no_finding_when_deadline_refuses_the_burst(mocker):
+    import time
+    from scanner.modules.rate_limit import RateLimitModule
+    request = mocker.patch("scanner.core.http.requests.request")
+    findings = RateLimitModule().scan("http://a/login", {"deadline": time.monotonic() - 1})
+    request.assert_not_called()
+    assert findings == []
+
+
+def test_rate_limit_no_finding_when_burst_is_cut_short(mocker):
+    from scanner.modules.rate_limit import RateLimitModule
+    ok = mocker.Mock(status_code=200, headers={})
+    mocker.patch("scanner.core.http.post", side_effect=[ok] + [None] * 14)
+    assert RateLimitModule().scan("http://a/login", {}) == []
+
+
+def test_rate_limit_no_finding_when_requests_raise(mocker):
+    from scanner.modules.rate_limit import RateLimitModule
+    mocker.patch("scanner.core.http.post", side_effect=RuntimeError("boom"))
+    assert RateLimitModule().scan("http://a/login", {}) == []
+
+
+def test_rate_limit_still_flags_a_full_unthrottled_burst(mocker):
+    from scanner.modules.rate_limit import RateLimitModule
+    post = mocker.patch("scanner.core.http.post",
+                        return_value=mocker.Mock(status_code=200, headers={}))
+    findings = RateLimitModule().scan("http://a/login", {})
+    assert post.call_count == RateLimitModule.BURST_SIZE
+    assert [f.type for f in findings] == ["rate-limit-missing"]
+
+
+def test_sqli_time_based_ignores_a_failed_request_that_took_long(mocker):
+    """Un timeout (requête échouée, None) dure longtemps : ce n'est pas un SLEEP() exécuté."""
+    from urllib.parse import urlparse, parse_qs
+    from scanner.modules.sqli import SqliModule
+    clock = {"t": 1000.0}
+    mocker.patch("scanner.modules.sqli.time.time", side_effect=lambda: clock["t"])
+
+    def fake_get(url, ctx, capture=False, **kw):
+        value = parse_qs(urlparse(url).query)["id"][0]
+        if value == "5" or "AND 1=" in value:
+            clock["t"] += 0.05
+            r = mocker.Mock(status_code=200, headers={}, text="page")
+            return (r, {}, {}) if capture else r
+        clock["t"] += 12  # payload time-based : la requête expire et échoue
+        return (None, None, None) if capture else None
+
+    mocker.patch("scanner.core.http.get", side_effect=fake_get)
+    findings = SqliModule().scan("http://example.com/?id=5", {})
+    assert not [f for f in findings if "time-based" in (f.title or "").lower()]
+
+
+def test_dir_bruteforce_no_finding_without_a_404_baseline(mocker):
+    """Baseline refusée/échouée : sur un site soft-404 (200 partout), chaque chemin passerait pour trouvé."""
+    from scanner.modules.dir_bruteforce import DirBruteforceModule
+    mocker.patch("scanner.modules.dir_bruteforce.time.sleep")
+    soft_404 = mocker.Mock(status_code=200, headers={}, text="<html>Page introuvable</html>")
+    mocker.patch("scanner.core.http.get",
+                 side_effect=lambda url, ctx, **kw: None if "_vulnscan_does_not_exist" in url else soft_404)
+    assert DirBruteforceModule().scan("http://a/", {}) == []
+
+
+def test_ssl_tls_connection_failure_is_not_a_tls_finding(mocker):
+    import socket
+    from scanner.modules.ssl_tls import SslTlsModule
+    mocker.patch.object(SslTlsModule, "_get_certificate_info", side_effect=socket.timeout("timed out"))
+    assert SslTlsModule().scan("https://a/", {}) == []
+
+
+def test_ssl_tls_handshake_error_still_reported(mocker):
+    import ssl
+    from scanner.modules.ssl_tls import SslTlsModule
+    mocker.patch.object(SslTlsModule, "_get_certificate_info",
+                        side_effect=ssl.SSLError("tlsv1 alert protocol version"))
+    findings = SslTlsModule().scan("https://a/", {})
+    assert [f.detection_method for f in findings] == ["tls-handshake-failure"]

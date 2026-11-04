@@ -203,9 +203,10 @@ class SqliModule(ScannerModule):
         try:
             new_url = SqliModule._url_with_param(parsed, original_params, param_name, value)
             t0 = time.time()
-            http.get(new_url, context, timeout=12, headers={"User-Agent": "VulnScan/1.4"})
+            r = http.get(new_url, context, timeout=12, headers={"User-Agent": "VulnScan/1.4"})
             t1 = time.time()
-            return t1 - t0, t1
+            # Requête échouée (timeout) ou refusée (deadline) : sa durée n'est pas un SLEEP().
+            return None if r is None else (t1 - t0, t1)
         except Exception:
             return None
 

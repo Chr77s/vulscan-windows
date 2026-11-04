@@ -43,18 +43,21 @@ class RateLimitModule(ScannerModule):
 
         start = time.time()
         for i in range(self.BURST_SIZE):
+            # Requête refusée (deadline) ou échouée : fin de la rafale, jamais un statut.
             try:
                 r = http.post(target, context, data={"username": "test", "password": "wrong"},
                                timeout=5, headers={"User-Agent": "VulnScan/1.2"})
-                statuses.append(r.status_code)
-                if r.headers.get("Retry-After"):
-                    retry_after = r.headers["Retry-After"]
-                if r.headers.get("X-RateLimit-Remaining"):
-                    rate_remaining = r.headers["X-RateLimit-Remaining"]
-                if r.status_code == 429:
-                    break
             except Exception:
-                statuses.append(0)
+                break
+            if r is None:
+                break
+            statuses.append(r.status_code)
+            if r.headers.get("Retry-After"):
+                retry_after = r.headers["Retry-After"]
+            if r.headers.get("X-RateLimit-Remaining"):
+                rate_remaining = r.headers["X-RateLimit-Remaining"]
+            if r.status_code == 429:
+                break
         duration = time.time() - start
 
         has_throttling = (
@@ -65,6 +68,10 @@ class RateLimitModule(ScannerModule):
 
         if has_throttling:
             return []  # rien à signaler — c'est bon
+
+        # Rafale incomplète : impossible d'affirmer « N requêtes sans throttling ».
+        if len(statuses) < self.BURST_SIZE:
+            return []
 
         # Tous les statuts identiques → pas de différenciation, pas de blocage
         if statuses and len(set(statuses)) <= 2 and 429 not in statuses:

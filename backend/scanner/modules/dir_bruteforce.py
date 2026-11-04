@@ -42,8 +42,8 @@ class DirBruteforceModule(ScannerModule):
             baseline_404_size = len(r_404.text)
             baseline_404_status = r_404.status_code
         except Exception:
-            baseline_404_size = 0
-            baseline_404_status = 404
+            # Baseline refusée/échouée : sur un site soft-404, chaque chemin passerait pour trouvé.
+            return []
 
         paths = get_payloads("dir_bruteforce")
         delay = 1.0 / self.RATE_LIMIT

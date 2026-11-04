@@ -54,6 +54,9 @@ class SslTlsModule(ScannerModule):
         try:
             cert_info = self._get_certificate_info(host, port)
         except Exception as e:
+            # Connexion impossible (timeout, refus, DNS) : rien n'a été négocié, pas une preuve TLS.
+            if not isinstance(e, ssl.SSLError):
+                return []
             return [Finding(
                 type="tls", severity="medium",
                 title="Erreur de handshake TLS",
