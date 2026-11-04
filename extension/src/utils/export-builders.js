@@ -70,6 +70,16 @@ function safeHref(url) {
   }
 }
 
+// Budget temps : modules sautés d'après scan.moduleLog (journal brut du backend).
+// Un scan partiel ne doit jamais passer pour « testé, rien trouvé ».
+function skippedModules(scan) {
+  return (scan?.moduleLog || []).filter(e => e.status === "skipped").map(e => e.module);
+}
+
+function partialScanNotice(n) {
+  return `Scan partiel : ${n} module(s) non exécuté(s) faute de temps — ce rapport ne couvre pas toute la surface testée.`;
+}
+
 function sarifLevelFor(severity) {
   return severity === "critical" || severity === "high" ? "error"
        : severity === "medium" ? "warning"
@@ -233,6 +243,10 @@ function buildXML(scan) {
   xml += `    <started-at>${new Date(scan.startedAt).toISOString()}</started-at>\n`;
   xml += `    <finished-at>${new Date(scan.finishedAt).toISOString()}</finished-at>\n`;
   xml += `    <total>${scan.vulnerabilities.length}</total>\n`;
+  const skipped = skippedModules(scan);
+  if (skipped.length) {
+    xml += `    <skipped-modules count="${skipped.length}">${skipped.map(m => `<module>${esc(m)}</module>`).join("")}</skipped-modules>\n`;
+  }
   xml += `  </metadata>\n`;
   xml += `  <summary critical="${counts.critical}" high="${counts.high}" medium="${counts.medium}" low="${counts.low}" info="${counts.info}"/>\n`;
   xml += '  <findings>\n';
@@ -271,6 +285,7 @@ function buildXML(scan) {
 }
 
 function buildSARIF(scan) {
+  const skipped = skippedModules(scan);
   return JSON.stringify({
     version: "2.1.0",
     $schema: "https://json.schemastore.org/sarif-2.1.0.json",
@@ -294,6 +309,7 @@ function buildSARIF(scan) {
         }],
         ...(v.remediationSnippet ? { properties: { remediationSnippet: v.remediationSnippet } } : {}),
       })),
+      ...(skipped.length ? { properties: { partialScan: true, skippedModules: skipped } } : {}),
     }],
   }, null, 2);
 }
@@ -357,6 +373,11 @@ function buildHTMLReport(scan, forPrint, priorScan, trendPoints) {
         <td>${v.remediationSnippet ? `<pre>${escapeHtml(v.remediationSnippet)}</pre>` : "—"}</td>
       </tr>`).join("");
 
+  const skipped = skippedModules(scan);
+  const partialHtml = skipped.length
+    ? `<div class="partial">${escapeHtml(partialScanNotice(skipped.length))}<br><small>Non exécutés : ${skipped.map(escapeHtml).join(", ")}</small></div>`
+    : "";
+
   const autoPrint = forPrint ? `<script>window.addEventListener("load", () => setTimeout(() => window.print(), 300));<\/script>` : "";
 
   return `<!DOCTYPE html>
@@ -394,6 +415,8 @@ function buildHTMLReport(scan, forPrint, priorScan, trendPoints) {
   pre{font-family:monospace;font-size:10px;background:#0f172a;color:#cbd5e1;padding:6px 8px;border-radius:4px;white-space:pre-wrap;max-width:280px;max-height:120px;overflow:auto}
   a{color:#4f46e5}
   .summary{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:16px 0;font-size:13px;line-height:1.6}
+  .partial{background:#fef9c3;border:1px solid #eab308;color:#854d0e;border-radius:8px;padding:12px 14px;margin:16px 0;font-size:13px;font-weight:600;line-height:1.5}
+  .partial small{font-weight:400}
   footer{margin-top:30px;padding-top:14px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:11px;text-align:center}
   @media print {body{padding:15px}.no-print{display:none}table{font-size:9.5px}pre{max-height:none}tr{page-break-inside:avoid}}
 </style>
@@ -413,6 +436,7 @@ function buildHTMLReport(scan, forPrint, priorScan, trendPoints) {
 
 <h2>Résumé exécutif</h2>
 <div class="summary">${summaryText}</div>
+${partialHtml}
 
 <div class="kpis">
   <div class="kpi tot"><div class="v">${scan.vulnerabilities.length}</div><div class="l">Total</div></div>

@@ -1321,6 +1321,7 @@ async function exportReport(format) {
     startedAt: allVulns[0]?.detectedAt || Date.now(),
     finishedAt: Date.now(),
     vulnerabilities: vulnsToExport,
+    moduleLog: openScan?.moduleLog || [],  // porte le marqueur « scan partiel » dans les exports
   };
   // started_at côté backend = currentScan.startedAt du service worker : on compare
   // donc à la même valeur (même source d'horloge) quand le scan est connu, et à

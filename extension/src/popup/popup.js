@@ -9,6 +9,7 @@
 let isScanning = false;
 let currentScanId = null;
 let vulns = [];
+let moduleLog = [];  // journal backend du scan affiché (entrées "skipped" = scan partiel)
 
 // ---- Initialisation ----
 document.addEventListener("DOMContentLoaded", async () => {
@@ -28,7 +29,10 @@ async function loadCurrentTab() {
 async function loadLastScan() {
   const { scanHistory } = await chrome.storage.local.get("scanHistory");
   const history = scanHistory ?? [];
-  if (history.length > 0) displayResults(history[0].vulnerabilities);
+  if (history.length > 0) {
+    moduleLog = history[0].moduleLog || [];
+    displayResults(history[0].vulnerabilities);
+  }
 }
 
 async function loadBackendStatus() {
@@ -82,6 +86,7 @@ async function startScan() {
 
   isScanning = true;
   vulns = [];
+  moduleLog = [];
   setScanningUI(true);
 
   const result = await chrome.runtime.sendMessage({
@@ -101,6 +106,7 @@ async function stopScan() {
 function onScanCompleted(scan) {
   isScanning = false;
   currentScanId = scan.id;
+  moduleLog = scan.moduleLog || [];
   setScanningUI(false);
   displayResults(scan.vulnerabilities);
 }
@@ -136,8 +142,12 @@ function displayResults(vulnerabilities) {
   document.getElementById("countLow").textContent      = counts.low;
 
   const list = document.getElementById("vulnList");
+  const skipped = skippedModules({ moduleLog });
+  const notice = skipped.length
+    ? `<div style="margin:6px 8px;padding:6px 8px;border:1px solid #eab308;border-radius:4px;color:#eab308;font-size:11px">${escapeHtml(partialScanNotice(skipped.length))}</div>`
+    : "";
   if (vulnerabilities.length === 0) {
-    list.innerHTML = `<div class="empty-state">Aucune vulnerabilite detectee.</div>`;
+    list.innerHTML = notice + `<div class="empty-state">Aucune vulnerabilite detectee.</div>`;
     return;
   }
 
@@ -145,7 +155,7 @@ function displayResults(vulnerabilities) {
     (SEVERITY_ORDER[a.severity] ?? 5) - (SEVERITY_ORDER[b.severity] ?? 5)
   );
 
-  list.innerHTML = sorted.slice(0, 20).map((v, i) => `
+  list.innerHTML = notice + sorted.slice(0, 20).map((v, i) => `
     <div class="vuln-item" data-idx="${i}">
       <div class="vuln-badges">
         <span class="badge badge-${v.severity}">${v.severity}</span>
@@ -221,6 +231,7 @@ async function doExport(format) {
     startedAt: data[0]?.detectedAt || Date.now(),
     finishedAt: Date.now(),
     vulnerabilities: vulnsToExport,
+    moduleLog,  // porte le marqueur « scan partiel » dans les exports
   };
 
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
