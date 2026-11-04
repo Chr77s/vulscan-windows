@@ -136,12 +136,13 @@ def _throttle(url, context):
         return
     min_interval = 1.0 / rate
     host = urlparse(url).hostname or ""
+    # Réserve le créneau sous le verrou, dort hors du verrou : un hôte lent ne bloque pas les autres.
     with _rate_lock:
         now = time.monotonic()
-        wait = min_interval - (now - _last_request_at.get(host, 0.0))
-        if wait > 0:
-            time.sleep(wait)
-        _last_request_at[host] = time.monotonic()
+        scheduled = max(now, _last_request_at.get(host, float("-inf")) + min_interval)
+        _last_request_at[host] = scheduled
+    if scheduled > now:
+        time.sleep(scheduled - now)
 
 
 def time_left(context: Optional[Dict[str, Any]]) -> Optional[float]:

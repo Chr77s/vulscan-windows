@@ -36,6 +36,51 @@ def test_throttle_does_not_wait_for_different_hosts(mocker):
     sleep_mock.assert_not_called()
 
 
+def test_throttle_does_not_hold_the_lock_while_sleeping(mocker):
+    """Pendant qu'un thread dort pour l'hôte A, une requête vers l'hôte B ne doit pas attendre."""
+    import threading
+    from scanner.core import http
+    http._last_request_at.clear()
+    fake = mocker.Mock(status_code=200, headers={}, text="")
+    mocker.patch("scanner.core.http.requests.request", return_value=fake)
+    mocker.patch("scanner.core.http.time.monotonic", return_value=100.0)
+    a_sleeping, release_a = threading.Event(), threading.Event()
+
+    def fake_sleep(seconds):
+        a_sleeping.set()
+        release_a.wait(5)
+
+    mocker.patch("scanner.core.http.time.sleep", side_effect=fake_sleep)
+    ctx = {"rate_limit_per_sec": 10}
+    http.send("GET", "http://a.test/one", context=ctx)  # pas d'attente : premier appel
+    t = threading.Thread(target=http.send, args=("GET", "http://a.test/two"), kwargs={"context": ctx})
+    t.start()
+    try:
+        assert a_sleeping.wait(5)
+        b_done = threading.Event()
+        threading.Thread(target=lambda: (http.send("GET", "http://b.test/one", context=ctx),
+                                         b_done.set()), daemon=True).start()
+        assert b_done.wait(2), "la requête vers B a attendu le sommeil de A"
+    finally:
+        release_a.set()
+        t.join(5)
+
+
+def test_throttle_reserves_successive_slots_for_one_host(mocker):
+    """Deux attentes concurrentes pour le même hôte réservent des créneaux distincts."""
+    from scanner.core import http
+    http._last_request_at.clear()
+    fake = mocker.Mock(status_code=200, headers={}, text="")
+    mocker.patch("scanner.core.http.requests.request", return_value=fake)
+    sleep_mock = mocker.patch("scanner.core.http.time.sleep")
+    mocker.patch("scanner.core.http.time.monotonic", return_value=100.0)
+    for _ in range(3):
+        http.send("GET", "http://d.test/x", context={"rate_limit_per_sec": 10})
+    waits = [c.args[0] for c in sleep_mock.call_args_list]
+    assert len(waits) == 2
+    assert abs(waits[0] - 0.1) < 1e-9 and abs(waits[1] - 0.2) < 1e-9
+
+
 def test_throttle_defaults_to_10_per_second_when_unconfigured(mocker):
     from scanner.core import http
     http._last_request_at.clear()

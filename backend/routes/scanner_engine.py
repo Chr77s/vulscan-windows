@@ -70,6 +70,10 @@ def run_scan():
     data = request.get_json(silent=True) or {}
     target = data.get("target", "")
     context = data.get("context", {})
+    # La deadline se mesure sur l'horloge monotone du serveur : celle d'un client n'a aucun
+    # sens (et une chaîne ferait planter le moteur hors du try → HTTP 500).
+    if isinstance(context, dict):
+        context.pop("deadline", None)
     enabled = data.get("enabled")
 
     if not target:
@@ -82,8 +86,8 @@ def run_scan():
         return jsonify({
             "findings": [f.to_dict() for f in findings],
             "stats": {
-                "modules_run": len(enabled) if enabled else
-                               len([m for m in engine.list_modules() if m["default_enabled"]]),
+                "modules_run": len([e for e in context.get("module_log", [])
+                                    if e.get("status") != "skipped"]),
                 "findings_count": len(findings),
                 "crawler": context.get("crawled", {}).get("stats", {}),
             },
