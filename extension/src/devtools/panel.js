@@ -230,7 +230,17 @@ function formatModuleLogLine(e) {
   if (e.status === "error") {
     return `✗ ${e.module} — erreur (${e.error || "inconnue"}) (${e.elapsedMs}ms)`;
   }
+  if (e.status === "skipped") {
+    return `⏱ ${e.module} — non exécuté (budget temps atteint)`;
+  }
   return `✓ ${e.module} — ${e.findings} findings (${e.elapsedMs}ms)`;
+}
+
+// Bannière « scan partiel » : calculée au rendu à partir des lignes (donc une
+// seule fois, que le log arrive en un lot ou par morceaux, ou soit restauré).
+function moduleLogBanner(lines) {
+  const n = lines.filter((l) => l.startsWith("⏱ ")).length;
+  return n ? `Scan partiel : ${n} module(s) non exécuté(s) faute de temps — relancez avec un profil plus ciblé.` : null;
 }
 
 function appendModuleLog(entries) {
@@ -265,7 +275,8 @@ function renderModuleLog() {
     return;
   }
   wrap.classList.add("visible");
-  el.innerHTML = moduleLogLines
+  const banner = moduleLogBanner(moduleLogLines);
+  el.innerHTML = (banner ? [banner, ...moduleLogLines] : moduleLogLines)
     .map((line) => `<div class="module-log-line">${escapeHtml(line)}</div>`)
     .join("");
   el.scrollTop = el.scrollHeight;

@@ -312,6 +312,11 @@ const DEPTH_FOR_PROFILE = {
   owasp: "aggressive", api: "extended",
 };
 
+// Budget temps (secondes) envoyé au backend par profil ; inconnu => 45.
+const TIME_BUDGET_FOR_PROFILE = {
+  quick: 45, standard: 45, deep: 150, owasp: 150, api: 150, custom: 150,
+};
+
 // Mapping des 5 anciennes cases "Tests actifs" (Options) vers des noms de module.
 const CONFIG_TO_MODULES = {
   testSQLi:          "sqli",
@@ -366,6 +371,8 @@ async function runActiveModules(cfg, url) {
   const auth = buildAuthFromConfig(cfg);
   console.log("[VulnScan] Modules actifs lancés :", enabled, "(auth:", auth ? "oui" : "non", ")");
 
+  const budget = TIME_BUDGET_FOR_PROFILE[cfg.scanProfile] || 45;
+
   try {
     const r = await fetch(cfg.backendUrl + "/scanner/run", {
       method: "POST",
@@ -377,9 +384,11 @@ async function runActiveModules(cfg, url) {
           ...(auth ? { auth } : {}),
           rate_limit_per_sec: cfg.requestsPerSecond,
           depth: DEPTH_FOR_PROFILE[cfg.scanProfile] || "extended",
+          time_budget_s: budget,
         },
       }),
-      signal: AbortSignal.timeout(60000),  // 60s — les tests actifs peuvent être longs
+      // budget + 15s de marge : le backend rend un résultat partiel à l'échéance
+      signal: AbortSignal.timeout((budget + 15) * 1000),
     });
     if (!r.ok) {
       console.warn("[VulnScan] /scanner/run HTTP " + r.status);
