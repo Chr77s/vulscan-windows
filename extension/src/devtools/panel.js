@@ -238,6 +238,7 @@ function formatModuleLogLine(e) {
 
 // Bannière « scan partiel » : calculée au rendu à partir des lignes (donc une
 // seule fois, que le log arrive en un lot ou par morceaux, ou soit restauré).
+// Contrat : le préfixe "⏱ " n'est produit QUE par la branche "skipped" de formatModuleLogLine.
 function moduleLogBanner(lines) {
   const n = lines.filter((l) => l.startsWith("⏱ ")).length;
   return n ? `Scan partiel : ${n} module(s) non exécuté(s) faute de temps — relancez avec un profil plus ciblé.` : null;
