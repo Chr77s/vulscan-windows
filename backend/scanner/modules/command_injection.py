@@ -4,9 +4,10 @@ Module : Command Injection (OS).
 Injection de séparateurs Unix/Windows (;, |, &&, ||, `, $()) sur les params
 qui ressemblent à des commandes (cmd, exec, run, ping, host).
 
-Détection :
-  - Signature dans la réponse : "uid=" (id), "Linux", "Windows IP Configuration"
-  - Réponse fortement différente (time-based difficile à faire sans bloquer)
+Détection : la signature du payload (catalogue command_injection.json : "uid=", "Linux",
+"DOMAIN\\user", "Windows IP Configuration"...) doit apparaître dans la réponse au payload
+ET être absente de la réponse baseline (même URL, valeur d'origine) — sinon la page la
+contenait déjà et ce n'est pas une preuve d'exécution.
 
 OWASP A03 / CWE-78.
 """
