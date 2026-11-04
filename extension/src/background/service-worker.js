@@ -12,6 +12,8 @@ import { pollScanJob } from "../utils/job-poller.js";
 
 // ---- État global ----
 let currentScan = null;
+let startingScan = false; // vrai entre l'entrée dans startScan et la pose de currentScan
+const SCAN_STALE_MS = 300000; // > budget max 150 s + poll 30 s
 let stopPending = false; // vrai tant que stopScan attend la fin de la phase active
 let activeRun = null; // { backendUrl, done } de la phase active en cours (voir stopScan)
 let backendStatus = { available: false, lastChecked: 0, version: null, error: null };
@@ -166,37 +168,49 @@ async function startScan(tabId, url) {
     broadcastMessage({ type: "SCAN_ERROR", payload: { error: errMsg } });
     return { success: false, error: errMsg };
   }
-  const { config } = await chrome.storage.local.get("config");
-  const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
-
-  // 1. Vérifier que le backend est disponible — REQUIS
-  await checkBackendHealth();
-  if (!backendStatus.available) {
-    const errMsg =
-      "Le backend Python est requis mais ne répond pas (" +
-      (backendStatus.error || "inconnu") +
-      "). Lancez-le avec backend/start.bat puis réessayez.";
+  // Un seul scan à la fois : refus si un démarrage est en cours ou si un scan tourne depuis < 5 min.
+  if (startingScan || (currentScan?.status === "running" && Date.now() - currentScan.startedAt < SCAN_STALE_MS)) {
+    const errMsg = "Un scan est déjà en cours — arrêtez-le ou attendez sa fin.";
     broadcastMessage({ type: "SCAN_ERROR", payload: { error: errMsg } });
-    return { error: errMsg };
+    return { success: false, error: errMsg };
   }
+  startingScan = true; // posé avant le premier await ; relâché dans le finally
+  let cfg, scan;
+  try {
+    const { config } = await chrome.storage.local.get("config");
+    cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
 
-  // 2. Préparer le scan
-  // Un scan encore en cours (2e onglet) est remplacé : libérer son job backend, il n'écrira plus rien.
-  if (currentScan && activeRun && activeRun.scan === currentScan) {
-    activeRun.stopRequested = true;
-    if (currentScan.backendJobId) cancelBackendJob(activeRun.backendUrl, currentScan.backendJobId);
+    // 1. Vérifier que le backend est disponible — REQUIS
+    await checkBackendHealth();
+    if (!backendStatus.available) {
+      const errMsg =
+        "Le backend Python est requis mais ne répond pas (" +
+        (backendStatus.error || "inconnu") +
+        "). Lancez-le avec backend/start.bat puis réessayez.";
+      broadcastMessage({ type: "SCAN_ERROR", payload: { error: errMsg } });
+      return { error: errMsg };
+    }
+
+    // 2. Préparer le scan
+    // Scan « running » périmé (> 5 min, crash du worker) : remplacé, on libère son job backend.
+    if (currentScan && activeRun && activeRun.scan === currentScan) {
+      activeRun.stopRequested = true;
+      if (currentScan.backendJobId) cancelBackendJob(activeRun.backendUrl, currentScan.backendJobId);
+    }
+    activeRun = null; // jamais d'état d'arrêt hérité d'un scan précédent
+    scan = currentScan = {
+      id: crypto.randomUUID(),
+      url,
+      startedAt: Date.now(),
+      status: "running",
+      vulnerabilities: [],
+      scanMode: cfg.passiveEnabled && cfg.activeEnabled ? "both"
+               : cfg.activeEnabled ? "active" : "passive",
+      backendVersion: backendStatus.version,
+    };
+  } finally {
+    startingScan = false;
   }
-  activeRun = null; // jamais d'état d'arrêt hérité d'un scan précédent
-  const scan = currentScan = {
-    id: crypto.randomUUID(),
-    url,
-    startedAt: Date.now(),
-    status: "running",
-    vulnerabilities: [],
-    scanMode: cfg.passiveEnabled && cfg.activeEnabled ? "both"
-             : cfg.activeEnabled ? "active" : "passive",
-    backendVersion: backendStatus.version,
-  };
 
   console.log("[VulnScan] Scan démarré sur " + url + " (backend v" + backendStatus.version + ")");
   updateBadge("scanning");
