@@ -627,12 +627,23 @@ async function stopScan() {
   const run = activeRun;
   if (scan && run && run.scan === scan) {
     // Phase active en cours : mémoriser l'arrêt (startJob annulera un id qui arrive après),
-    // annuler le job s'il est connu, puis laisser startScan récupérer le partiel (≤ 8 s).
+    // annuler le job s'il est connu, puis laisser startScan récupérer le partiel (≤ 20 s :
+    // requête en vol ≤ 8 s + sommeil de poll 2 s + GET 5 s, et certains modules finissent plus tard).
     run.stopRequested = true;
     stopPending = true; // START_SCAN refusé jusqu'à la fin de cet arrêt
     try {
       if (scan.backendJobId) cancelBackendJob(run.backendUrl, scan.backendJobId);
-      await Promise.race([run.done, new Promise((res) => setTimeout(res, 8000))]);
+      const arrived = await Promise.race([
+        run.done.then(() => true),
+        new Promise((res) => setTimeout(() => res(false), 20000)),
+      ]);
+      if (!arrived && currentScan === scan) {
+        // Ne jamais perdre silencieusement : le scan est finalisé avec ce qu'il a, et on le dit.
+        const line = { module: "scanner", findings: 0, elapsedMs: 0, status: "error",
+                       error: "résultat partiel non reçu (arrêt trop long)" };
+        scan.moduleLog = [...(scan.moduleLog || []), line];
+        broadcastMessage({ type: "MODULE_LOG", payload: [line] });
+      }
     } finally {
       stopPending = false;
     }
