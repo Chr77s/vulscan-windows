@@ -1,9 +1,12 @@
 """Scans en arrière-plan : JobStore thread-safe (lancement, instantané, annulation)."""
 from __future__ import annotations
+import logging
 import threading
 import time
 import uuid
 from typing import Any, Callable, Dict, Optional
+
+logger = logging.getLogger("vulnscan.jobs")
 
 MAX_RUNNING = 2
 RETENTION_S = 900
@@ -55,6 +58,7 @@ class JobStore:
         try:
             findings, error = run_fn(target, ctx, enabled, crawl), None
         except BaseException as e:  # SystemExit etc. : le job ne doit jamais rester "running"
+            logger.exception("Scan job crashed")
             error = str(e) or type(e).__name__
         finally:
             with self._lock:
