@@ -350,9 +350,10 @@ async function onStartScan() {
     });
     if (result?.error) {
       setScanningState(false);
-      setStatus("error", "Backend indisponible");
+      // L'alerte est déjà affichée une fois par le handler SCAN_ERROR : ici on sort
+      // de l'état « scan » avec la vraie raison, sans second message.
+      setStatus("error", result.error);
       hideProgress();
-      alert("⚠️ Scan impossible :\n\n" + result.error);
       refreshBackendStatus();
       return;
     }

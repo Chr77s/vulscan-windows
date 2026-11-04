@@ -94,7 +94,13 @@ async function startScan() {
     payload: { tabId: tab.id, url: tab.url },
   });
 
-  currentScanId = result.id;
+  if (result?.error) {
+    isScanning = false;
+    setScanningUI(false);
+    alert("Scan impossible : " + result.error);
+    return;
+  }
+  currentScanId = result?.id;
 }
 
 async function stopScan() {
