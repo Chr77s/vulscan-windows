@@ -12,6 +12,7 @@ import { pollScanJob } from "../utils/job-poller.js";
 
 // ---- État global ----
 let currentScan = null;
+let stopPending = false; // vrai tant que stopScan attend la fin de la phase active
 let activeRun = null; // { backendUrl, done } de la phase active en cours (voir stopScan)
 let backendStatus = { available: false, lastChecked: 0, version: null, error: null };
 
@@ -145,6 +146,11 @@ async function handleMessage(message) {
 // Lancement de scan — pipeline complet
 // =====================================================
 async function startScan(tabId, url) {
+  if (stopPending) {
+    const errMsg = "Arrêt du scan précédent en cours — réessayez dans quelques secondes.";
+    broadcastMessage({ type: "SCAN_ERROR", payload: { error: errMsg } });
+    return { success: false, error: errMsg };
+  }
   const { config } = await chrome.storage.local.get("config");
   const cfg = { ...DEFAULT_CONFIG, ...(config || {}) };
 
@@ -222,6 +228,8 @@ async function startScan(tabId, url) {
     activeRun = { scan, stopRequested: false, backendUrl: cfg.backendUrl, done: new Promise((res) => { endActiveRun = res; }) };
     try {
       const { findings: activeVulns, discovery, moduleLog } = await runActiveModules(cfg, url);
+      // Scan arrêté entre-temps (finalisé ou remplacé) : on n'écrit ni ne diffuse plus rien.
+      if (stopped()) return { success: true };
       for (const v of activeVulns) {
         const enriched = ensureFinding(v, url);
         scan.vulnerabilities.push(enriched);
@@ -385,6 +393,7 @@ async function runActiveModules(cfg, url) {
   console.log("[VulnScan] Modules actifs lancés :", enabled, "(auth:", auth ? "oui" : "non", ")");
 
   const budget = TIME_BUDGET_FOR_PROFILE[cfg.scanProfile] || 45;
+  let myJobId = null;
   const run = activeRun; // porte l'indicateur d'arrêt de CE scan
   const base = cfg.backendUrl + "/scanner/jobs";
   const EMPTY = { findings: [], discovery: null, moduleLog: [] };
@@ -419,6 +428,7 @@ async function runActiveModules(cfg, url) {
       throw err;
     }
     const { jobId } = await r.json();
+    myJobId = jobId;
     if (run && run.scan === currentScan) currentScan.backendJobId = jobId;
     // Stop pressé avant l'arrivée de l'id : annuler tout de suite pour libérer le slot backend.
     if (run && run.stopRequested) cancelBackendJob(cfg.backendUrl, jobId);
@@ -449,7 +459,8 @@ async function runActiveModules(cfg, url) {
     });
     if (!result) {
       console.warn("[VulnScan] job " + status + " sans résultat");
-      const line = reportError(status === "error" ? "backend injoignable pendant le scan" : "scan abandonné (délai dépassé)");
+      const line = reportError(status === "error" ? "backend injoignable pendant le scan"
+        : status === "cancelled" ? "scan arrêté" : "scan abandonné (délai dépassé)");
       return { ...EMPTY, moduleLog: [...moduleLog, line] };
     }
     return { findings: result.findings || [], discovery: result.discovery || null, moduleLog: result.moduleLog || [] };
@@ -458,7 +469,11 @@ async function runActiveModules(cfg, url) {
     const line = reportError(e.status === 429 ? "backend occupé (2 scans actifs max)" : e.message);
     return { ...EMPTY, moduleLog: [line] };
   } finally {
-    try { chrome.storage.session.remove("activeScanJob").catch(() => {}); } catch { /* best effort */ }
+    // Ne retire la clé que si elle porte encore NOTRE job (un scan plus récent a pu l'écrire).
+    try {
+      const { activeScanJob } = await chrome.storage.session.get("activeScanJob");
+      if (!myJobId || activeScanJob?.jobId === myJobId) await chrome.storage.session.remove("activeScanJob");
+    } catch { /* best effort */ }
   }
 }
 
@@ -614,10 +629,15 @@ async function stopScan() {
     // Phase active en cours : mémoriser l'arrêt (startJob annulera un id qui arrive après),
     // annuler le job s'il est connu, puis laisser startScan récupérer le partiel (≤ 8 s).
     run.stopRequested = true;
-    if (scan.backendJobId) cancelBackendJob(run.backendUrl, scan.backendJobId);
-    await Promise.race([run.done, new Promise((res) => setTimeout(res, 8000))]);
+    stopPending = true; // START_SCAN refusé jusqu'à la fin de cet arrêt
+    try {
+      if (scan.backendJobId) cancelBackendJob(run.backendUrl, scan.backendJobId);
+      await Promise.race([run.done, new Promise((res) => setTimeout(res, 8000))]);
+    } finally {
+      stopPending = false;
+    }
   }
-  return currentScan === scan && scan ? finalizeScan() : { success: true };
+  return scan && currentScan === scan ? finalizeScan() : { success: true };
 }
 
 // Borne appliquée UNIQUEMENT à la copie écrite dans chrome.storage.local.scanHistory
