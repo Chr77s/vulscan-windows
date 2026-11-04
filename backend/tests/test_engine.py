@@ -261,3 +261,40 @@ def test_crash_after_deadline_still_logged_as_error():
                           _budget_module("b")], ctx)
     assert log["a"]["status"] == "error"
     assert log["b"]["status"] == "skipped"
+
+
+# ---------------------------------------------------------------------
+# Progression publiée dans le contexte (jobs en arrière-plan)
+# ---------------------------------------------------------------------
+def test_module_log_visible_during_run():
+    seen = {}
+
+    class _B(_budget_module("b")):
+        def scan(self, target, context):
+            seen["first"] = context["module_log"][0]["module"]
+            return []
+
+    _run_budget([_budget_module("a"), _B], {})
+    assert seen["first"] == "a"
+
+
+def test_current_module_set_during_and_cleared_after():
+    seen = []
+
+    class _A(_budget_module("a")):
+        def scan(self, target, context):
+            seen.append(context["current_module"])
+            return []
+
+    ctx = {}
+    _run_budget([_A], ctx)
+    assert seen == ["a"]
+    assert ctx["current_module"] is None
+
+
+def test_cancelled_skip_reason():
+    import time
+    ctx = {"cancelled": True, "deadline": time.monotonic() - 1}
+    _, log = _run_budget([_budget_module("a")], ctx)
+    assert log["a"] == {"module": "a", "findings": 0, "elapsed_ms": 0,
+                        "status": "skipped", "reason": "cancelled"}

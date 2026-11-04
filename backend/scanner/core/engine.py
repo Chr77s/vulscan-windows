@@ -110,12 +110,16 @@ class ScannerEngine:
         )
 
         module_log: List[Dict[str, Any]] = []
+        # Liste vivante : un job en arrière-plan la lit pendant le scan (entrées ajoutées entières).
+        context["module_log"] = module_log
         for cls in modules_to_run:
             left = time_left(context)
             if left is not None and (left <= 0 or left < cls.min_time_to_start_s):
                 module_log.append({"module": cls.name, "findings": 0, "elapsed_ms": 0,
-                                   "status": "skipped", "reason": "time_budget"})
+                                   "status": "skipped",
+                                   "reason": "cancelled" if context.get("cancelled") else "time_budget"})
                 continue
+            context["current_module"] = cls.name
             # shortcut: once started, a module can still overrun the deadline by one in-flight request (timeout clipped to >= 0.5 s) or by a min_time_to_start_s estimate that proves too low; the extension aborts 15 s after the budget for that reason — upgrade to per-module cancellation if that margin proves too small.
             t0 = time.monotonic()
             try:
@@ -140,6 +144,8 @@ class ScannerEngine:
                     "status": "error",
                     "error": str(e),
                 })
+
+        context["current_module"] = None
 
         # Fusion bayésienne
         merged = self._bayesian_merge(findings)
