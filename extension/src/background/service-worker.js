@@ -77,6 +77,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
+// Au (re)démarrage du worker : un job resté dans la session est orphelin (le scan qui le suivait
+// est perdu avec l'ancienne instance) -> on l'annule pour libérer son slot backend.
+(async () => {
+  try {
+    const { activeScanJob } = await chrome.storage.session.get("activeScanJob");
+    if (!activeScanJob?.jobId || currentScan) return; // un scan de CETTE instance possède sa clé
+    const { config } = await chrome.storage.local.get("config");
+    const { backendUrl } = { ...DEFAULT_CONFIG, ...(config || {}) };
+    await cancelBackendJob(backendUrl, activeScanJob.jobId);
+    await chrome.storage.session.remove("activeScanJob");
+  } catch (e) {
+    console.warn("[VulnScan] récupération du job orphelin :", e.message);
+  }
+})();
+
 async function handleMessage(message) {
   switch (message.type) {
     case "START_SCAN":   return await startScan(message.payload.tabId, message.payload.url);

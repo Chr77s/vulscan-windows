@@ -66,6 +66,7 @@ class JobStore:
                 job["status"] = ("error" if error is not None
                                  else "cancelled" if ctx.get("cancelled") else "done")
                 job["finished_at"] = self._clock()
+                ctx.pop("auth", None)  # pas d'identifiants en RAM pendant la rétention
 
     def snapshot(self, job_id: str) -> Optional[dict]:
         with self._lock:

@@ -183,3 +183,21 @@ def test_cancel_finished_job_leaves_status_and_context_unchanged():
     assert after["status"] == "done"
     assert "cancelled" not in after["context"] and "deadline" not in after["context"]
     assert after["context"] == before["context"]
+
+
+def test_finished_job_drops_auth_but_keeps_response_inputs():
+    from routes.scanner_engine import _build_run_response
+    ctx = {"auth": {"token": "secret"}, "depth": "basic"}
+
+    def run(t, c, e, k):
+        assert c["auth"]["token"] == "secret"  # disponible pendant le run
+        c["module_log"].append({"module": "m1", "findings": 0, "elapsed_ms": 1})
+        return []
+
+    store = JobStore()
+    jid = store.create(run, "http://t", ctx, None, True)
+    assert _wait_status(store, jid, "done")
+    snap = store.snapshot(jid)
+    assert "auth" not in snap["context"]
+    assert snap["context"]["depth"] == "basic"
+    assert _build_run_response(snap["findings"], snap["context"])["moduleLog"][0]["module"] == "m1"
