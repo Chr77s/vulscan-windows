@@ -6,6 +6,9 @@ export async function pollScanJob({
   startJob, getJob, cancelJob, sleep, now, onProgress, onTick,
   intervalMs = 2000, maxDurationMs, maxConsecutiveErrors = 3,
 }) {
+  if (!Number.isFinite(maxDurationMs) || maxDurationMs <= 0) {
+    throw new TypeError("pollScanJob: maxDurationMs must be a finite number > 0");
+  }
   const { jobId } = await startJob();
   const start = now();
   let delivered = 0; // moduleLog only grows, so a count is enough
@@ -20,11 +23,11 @@ export async function pollScanJob({
     let job = null;
     try {
       job = await getJob(jobId);
-      errors = 0;
+      if (job) errors = 0; else errors += 1; // an empty body is a failed poll
     } catch {
       errors += 1;
     }
-    if (onTick) onTick(jobId);
+    try { if (onTick) onTick(jobId); } catch { /* a failing callback must not stop polling */ }
 
     if (job) {
       status = job.status;
@@ -33,13 +36,13 @@ export async function pollScanJob({
         const fresh = entries.slice(delivered);
         delivered = entries.length;
         log.push(...fresh);
-        if (onProgress) onProgress(fresh);
+        try { if (onProgress) onProgress(fresh); } catch { /* entries count as delivered */ }
       }
       if (TERMINAL.has(status)) {
         return { status, result: job.result ?? null, moduleLog: log };
       }
     } else if (errors >= maxConsecutiveErrors) {
-      try { await cancelJob(jobId); } catch { /* best effort */ }
+      if (!cancelSent) try { await cancelJob(jobId); } catch { /* best effort */ }
       return { status: "error", result: null, moduleLog: log };
     }
 

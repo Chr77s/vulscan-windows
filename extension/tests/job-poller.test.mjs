@@ -108,3 +108,68 @@ test("calls onTick every poll with the job id", async () => {
   await pollScanJob(opts);
   assert.deepEqual(calls.ticks, ["j1", "j1", "j1"]);
 });
+
+test("throwing callbacks never stop polling nor duplicate entries", async () => {
+  let progressCalls = 0;
+  const { opts, calls } = harness([
+    body("running", ["a"]),
+    body("running", ["a", "b"]),
+    body("done", ["a", "b", "c"], { result: { ok: 1 } }),
+  ], {
+    onTick: () => { throw new Error("storage"); },
+    onProgress: (e) => { calls0.push(e); if (++progressCalls === 1) throw new Error("once"); },
+  });
+  const calls0 = [];
+  const r = await pollScanJob(opts);
+  assert.equal(r.status, "done");
+  assert.deepEqual(calls0, [["a"], ["b"], ["c"]]);
+  assert.deepEqual(r.moduleLog, ["a", "b", "c"]);
+});
+
+test("rejects a missing or non-finite maxDurationMs before starting", async () => {
+  for (const bad of [undefined, 0, -1, NaN, Infinity, "5"]) {
+    let started = false;
+    const { opts } = harness([body("done", [])], { startJob: async () => { started = true; return { jobId: "j1" }; } });
+    opts.maxDurationMs = bad; // set after harness: its default would mask undefined
+    await assert.rejects(pollScanJob(opts), TypeError);
+    assert.equal(started, false);
+  }
+});
+
+test("sends cancel at most once even if polls fail after a timeout-cancel", async () => {
+  const { opts, calls } = harness([body("running", []), new Error("x")], { maxDurationMs: 1000 });
+  const r = await pollScanJob(opts);
+  assert.equal(r.status, "error");
+  assert.deepEqual(calls.cancel, ["j1"]);
+});
+
+test("a null/undefined getJob result counts as a failure", async () => {
+  const { opts, calls } = harness([body("running", ["a"]), undefined, null, undefined]);
+  const r = await pollScanJob(opts);
+  assert.equal(r.status, "error");
+  assert.equal(calls.get, 4);
+  assert.deepEqual(calls.cancel, ["j1"]);
+});
+
+test("startJob rejection rejects pollScanJob", async () => {
+  const { opts } = harness([body("done", [])], { startJob: async () => { throw new Error("down"); } });
+  await assert.rejects(pollScanJob(opts), /down/);
+});
+
+test("a shorter moduleLog on a later poll does not crash or re-deliver", async () => {
+  const { opts, calls } = harness([
+    body("running", ["a", "b"]),
+    body("running", ["a"]),
+    body("done", ["a", "b", "c"], { result: {} }),
+  ]);
+  const r = await pollScanJob(opts);
+  assert.deepEqual(calls.progress, [["a", "b"], ["c"]]);
+  assert.equal(r.status, "done");
+});
+
+test("timeout with a job that never stops resolves running/null", async () => {
+  const { opts } = harness([body("running", [])], { maxDurationMs: 1000 });
+  const r = await pollScanJob(opts);
+  assert.equal(r.status, "running");
+  assert.equal(r.result, null);
+});
