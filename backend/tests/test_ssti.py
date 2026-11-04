@@ -13,9 +13,11 @@ def test_ssti_ignores_when_expected_value_already_in_baseline(mocker):
     """Si la baseline contient déjà '9801547' (coïncidence très improbable mais testée quand
     même pour la symétrie avec l'ancien oracle), pas de faux positif."""
     from scanner.modules.ssti import SstiModule
+    from scanner.payloads import get_payloads
     baseline = mocker.Mock(status_code=200, headers={}, text="<p>ref: 9801547</p>")
     confirming = mocker.Mock(status_code=200, headers={}, text="<p>ref: 9801547</p>")
-    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [confirming] * 10)
+    # Autant de réponses que de sondes du catalogue (survit à l'enrichissement).
+    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [confirming] * len(get_payloads("ssti")))
     findings = SstiModule().scan("http://example.com/?name=hi", {})
     assert findings == []
 
@@ -26,9 +28,10 @@ def test_ssti_ignores_coincidental_49_substring_without_7_digit_oracle(mocker):
     ici un '49' coïncidentel, mais seul le nouvel oracle à 7 chiffres ('9801547') fait foi :
     comme il n'apparaît dans aucune des deux, aucun finding ne doit être produit."""
     from scanner.modules.ssti import SstiModule
+    from scanner.payloads import get_payloads
     baseline = mocker.Mock(status_code=200, headers={}, text="<p>Age: 49</p>")
     probed = mocker.Mock(status_code=200, headers={}, text="<p>Age: 49</p>")
-    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [probed] * 10)
+    mocker.patch("scanner.core.http.requests.request", side_effect=[baseline] + [probed] * len(get_payloads("ssti")))
     findings = SstiModule().scan("http://example.com/?name=hi", {})
     assert findings == []
 

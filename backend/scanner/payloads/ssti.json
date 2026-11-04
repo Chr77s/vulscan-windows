@@ -1,15 +1,153 @@
 {
   "family": "ssti",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "categories": {
     "arithmetic_probe": [
-      {"payload": "{{1337*7331}}", "engine": "Jinja2/Twig",          "expected": "9801547", "confidence_hint": 90, "depth": "basic"},
-      {"payload": "${1337*7331}",  "engine": "Freemarker/Velocity",  "expected": "9801547", "confidence_hint": 90, "depth": "basic"},
-      {"payload": "#{1337*7331}",  "engine": "Thymeleaf (SpEL)",     "expected": "9801547", "confidence_hint": 85, "depth": "extended"},
-      {"payload": "*{1337*7331}",  "engine": "Thymeleaf (alt)",      "expected": "9801547", "confidence_hint": 85, "depth": "extended"},
-      {"payload": "<%= 1337*7331 %>", "engine": "ERB (Ruby/Rails)", "expected": "9801547", "confidence_hint": 85, "depth": "extended"},
-      {"payload": "{1337*7331}", "engine": "Smarty (PHP)",         "expected": "9801547", "confidence_hint": 85, "depth": "extended"},
-      {"payload": "@(1337*7331)", "engine": "Razor (ASP.NET)",     "expected": "9801547", "confidence_hint": 80, "depth": "aggressive"}
+      {
+        "payload": "{{1337*7331}}",
+        "engine": "Jinja2/Twig",
+        "expected": "9801547",
+        "confidence_hint": 90,
+        "depth": "basic"
+      },
+      {
+        "payload": "${1337*7331}",
+        "engine": "Freemarker/Velocity",
+        "expected": "9801547",
+        "confidence_hint": 90,
+        "depth": "basic"
+      },
+      {
+        "payload": "#{1337*7331}",
+        "engine": "Thymeleaf (SpEL)",
+        "expected": "9801547",
+        "confidence_hint": 85,
+        "depth": "extended"
+      },
+      {
+        "payload": "*{1337*7331}",
+        "engine": "Thymeleaf (alt)",
+        "expected": "9801547",
+        "confidence_hint": 85,
+        "depth": "extended"
+      },
+      {
+        "payload": "<%= 1337*7331 %>",
+        "engine": "ERB (Ruby/Rails)",
+        "expected": "9801547",
+        "confidence_hint": 85,
+        "depth": "extended"
+      },
+      {
+        "payload": "{1337*7331}",
+        "engine": "Smarty (PHP)",
+        "expected": "9801547",
+        "confidence_hint": 85,
+        "depth": "extended"
+      },
+      {
+        "payload": "@(1337*7331)",
+        "engine": "Razor (ASP.NET)",
+        "expected": "9801547",
+        "confidence_hint": 80,
+        "depth": "aggressive"
+      },
+      {
+        "payload": "{{1361*7309}}",
+        "engine": "Jinja2/Twig",
+        "expected": "9947549",
+        "confidence_hint": 90,
+        "depth": "extended",
+        "description": "Sonde arithmétique Jinja2/Twig (produit distinctif)"
+      },
+      {
+        "payload": "${1363*7013}",
+        "engine": "Freemarker/Mako",
+        "expected": "9558719",
+        "confidence_hint": 90,
+        "depth": "extended",
+        "description": "Sonde arithmétique Freemarker/Mako (produit distinctif)"
+      },
+      {
+        "payload": "#set($v=1367*7001)$v",
+        "engine": "Velocity",
+        "expected": "9570367",
+        "confidence_hint": 90,
+        "depth": "extended",
+        "description": "Sonde arithmétique Velocity (produit distinctif)"
+      },
+      {
+        "payload": "<%= 1373*6997 %>",
+        "engine": "ERB/Ruby",
+        "expected": "9606881",
+        "confidence_hint": 90,
+        "depth": "extended",
+        "description": "Sonde arithmétique ERB/Ruby (produit distinctif)"
+      },
+      {
+        "payload": "[[${1381*6991}]]",
+        "engine": "Thymeleaf",
+        "expected": "9654571",
+        "confidence_hint": 90,
+        "depth": "extended",
+        "description": "Sonde arithmétique Thymeleaf (produit distinctif)"
+      },
+      {
+        "payload": "{1399*6983}",
+        "engine": "Smarty",
+        "expected": "9769217",
+        "confidence_hint": 90,
+        "depth": "extended",
+        "description": "Sonde arithmétique Smarty (produit distinctif)"
+      },
+      {
+        "payload": "@(1409*6977)",
+        "engine": "Razor/.NET",
+        "expected": "9830593",
+        "confidence_hint": 90,
+        "depth": "extended",
+        "description": "Sonde arithmétique Razor/.NET (produit distinctif)"
+      },
+      {
+        "payload": "#{1423*6971}",
+        "engine": "Freemarker #{}",
+        "expected": "9919733",
+        "confidence_hint": 90,
+        "depth": "extended",
+        "description": "Sonde arithmétique Freemarker #{} (produit distinctif)"
+      },
+      {
+        "payload": "{{1427*6961}}",
+        "engine": "Nunjucks/Tornado",
+        "expected": "9933347",
+        "confidence_hint": 88,
+        "depth": "aggressive",
+        "description": "Sonde arithmetique Nunjucks/Tornado"
+      },
+      {
+        "payload": "${1429*6959}",
+        "engine": "Java EL",
+        "expected": "9944411",
+        "confidence_hint": 88,
+        "depth": "aggressive",
+        "description": "Sonde arithmetique Java EL"
+      },
+      {
+        "payload": "#{1433*6949}",
+        "engine": "Ruby #{} (Slim)",
+        "expected": "9957917",
+        "confidence_hint": 88,
+        "depth": "aggressive",
+        "description": "Sonde arithmetique Ruby #{} (Slim)"
+      },
+      {
+        "payload": "{{=1439*6947}}",
+        "engine": "EJS",
+        "expected": "9996733",
+        "confidence_hint": 88,
+        "depth": "aggressive",
+        "description": "Sonde arithmetique EJS"
+      }
     ]
   }
 }
