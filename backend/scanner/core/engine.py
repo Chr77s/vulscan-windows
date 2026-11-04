@@ -112,11 +112,11 @@ class ScannerEngine:
         module_log: List[Dict[str, Any]] = []
         for cls in modules_to_run:
             left = time_left(context)
-            if left is not None and left <= 0:
+            if left is not None and (left <= 0 or left < cls.min_time_to_start_s):
                 module_log.append({"module": cls.name, "findings": 0, "elapsed_ms": 0,
                                    "status": "skipped", "reason": "time_budget"})
                 continue
-            # shortcut: ssl_tls/subdomain_enum/oob bypass http.send, so a module started just before the deadline can overrun by its own max (~15 s); the extension aborts 15 s after the budget for that reason — upgrade to per-module cancellation if that margin proves too small.
+            # shortcut: once started, a module can still overrun the deadline by one in-flight request (timeout clipped to >= 0.5 s) or by a min_time_to_start_s estimate that proves too low; the extension aborts 15 s after the budget for that reason — upgrade to per-module cancellation if that margin proves too small.
             t0 = time.monotonic()
             try:
                 instance = cls()

@@ -72,7 +72,9 @@ class SsrfModule(ScannerModule):
                 http.get(test_url, context, timeout=8, headers={"User-Agent": "VulnScan/1.2"})
             except Exception:
                 continue
-            if canary.wait_for_hit(timeout=4):
+            left = http.time_left(context)  # l'attente OOB ne passe pas par http.send
+            wait = 4 if left is None else min(4, left)
+            if wait > 0 and canary.wait_for_hit(timeout=wait):
                 hit = canary.hits()[0] if canary.hits() else {}
                 findings.append(Finding(
                     type="ssrf", severity="critical",

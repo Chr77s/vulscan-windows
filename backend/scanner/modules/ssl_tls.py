@@ -29,6 +29,7 @@ class SslTlsModule(ScannerModule):
     title = "SSL/TLS Quality Audit"
     description = "Analyse la qualité TLS : versions, ciphers, certificat, expiration."
     default_enabled = True
+    min_time_to_start_s = 30.0  # sockets bruts, hors deadline : 6 s + 4 × 4 s de connexion, plus les handshakes
 
     # Versions de protocole à tester (constants TLS dans Python 3.10+)
     OBSOLETE_VERSIONS = [

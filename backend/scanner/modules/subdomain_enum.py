@@ -49,6 +49,7 @@ class SubdomainEnumModule(ScannerModule):
     title = "Subdomain Enumeration"
     description = "Brute-force DNS de sous-domaines communs + Certificate Transparency."
     default_enabled = False  # peut être lent
+    min_time_to_start_s = 25.0  # DNS (pool de threads) + crt.sh timeout=8, hors deadline
 
     MAX_THREADS = 20
 

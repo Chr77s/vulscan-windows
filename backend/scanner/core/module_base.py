@@ -70,6 +70,9 @@ class ScannerModule:
     title: str = "Module abstrait"
     description: str = ""
     default_enabled: bool = True
+    # Pire durée (s) d'un module qui contourne http.send (donc la deadline) une fois lancé :
+    # l'engine ne le démarre pas s'il reste moins que ça.
+    min_time_to_start_s: float = 0.0
 
     def __init__(self, options: Optional[Dict[str, Any]] = None):
         self.options = options or {}

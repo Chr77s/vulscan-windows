@@ -50,6 +50,9 @@ class DirBruteforceModule(ScannerModule):
         last_req = 0.0
 
         for entry in paths:
+            left = http.time_left(context)  # sinon le sleep ci-dessous continue après la deadline
+            if left is not None and left <= 0:
+                break
             # Rate limit
             sleep_time = delay - (time.time() - last_req)
             if sleep_time > 0:

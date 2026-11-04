@@ -218,6 +218,43 @@ def test_existing_deadline_not_overwritten():
     assert all(e["status"] == "skipped" for e in log.values())
 
 
+def _slow_start_module(mod_name):
+    m = _budget_module(mod_name)
+    m.min_time_to_start_s = 30
+    return m
+
+
+def test_module_needing_more_time_than_left_is_skipped():
+    import time
+    ctx = {"deadline": time.monotonic() + 10}
+    findings, log = _run_budget([_slow_start_module("slow"), _budget_module("fast")], ctx)
+    assert log["slow"] == {"module": "slow", "findings": 0, "elapsed_ms": 0,
+                           "status": "skipped", "reason": "time_budget"}
+    assert [f.type for f in findings] == ["t-fast"]
+
+
+def test_module_needing_less_time_than_left_runs():
+    import time
+    ctx = {"deadline": time.monotonic() + 40}
+    findings, log = _run_budget([_slow_start_module("slow")], ctx)
+    assert "status" not in log["slow"]
+    assert [f.type for f in findings] == ["t-slow"]
+
+
+def test_min_time_to_start_ignored_without_budget():
+    findings, log = _run_budget([_slow_start_module("slow")], {})
+    assert "status" not in log["slow"]
+    assert len(findings) == 1
+
+
+def test_deadline_bypassing_modules_declare_min_time_to_start():
+    from scanner.modules.ssl_tls import SslTlsModule
+    from scanner.modules.subdomain_enum import SubdomainEnumModule
+    assert ScannerModule.min_time_to_start_s == 0.0
+    assert SslTlsModule.min_time_to_start_s == 30.0
+    assert SubdomainEnumModule.min_time_to_start_s == 25.0
+
+
 def test_crash_after_deadline_still_logged_as_error():
     ctx = {"time_budget_s": 30}
     _, log = _run_budget([_budget_module("a", past_deadline=True, crash=True),

@@ -638,6 +638,54 @@ def test_ssl_tls_connection_failure_is_not_a_tls_finding(mocker):
     assert SslTlsModule().scan("https://a/", {}) == []
 
 
+def _ssrf_wait_timeouts(mocker, context):
+    """Lance ssrf sur un param URL-like et renvoie les timeouts passés à wait_for_hit."""
+    from scanner.modules.ssrf import SsrfModule
+    canary = mocker.Mock(url="http://oob.test/x")
+    canary.wait_for_hit.return_value = False
+    mocker.patch("scanner.core.oob.OOBCanary.new", return_value=canary)
+    page = mocker.Mock(status_code=200, headers={}, text="baseline body")
+    mocker.patch("scanner.core.http.get",
+                 side_effect=lambda url, ctx, capture=False, **kw: (page, {}, {}) if capture else page)
+    SsrfModule().scan("http://a/?url=http://x", context)
+    return [c.kwargs["timeout"] for c in canary.wait_for_hit.call_args_list]
+
+
+def test_ssrf_oob_wait_unchanged_without_budget(mocker):
+    assert _ssrf_wait_timeouts(mocker, {}) == [4]
+
+
+def test_ssrf_oob_wait_clipped_to_time_left(mocker):
+    import time
+    waits = _ssrf_wait_timeouts(mocker, {"deadline": time.monotonic() + 2})
+    assert len(waits) == 1 and 0 < waits[0] <= 2
+
+
+def test_ssrf_oob_wait_skipped_once_deadline_passed(mocker):
+    import time
+    assert _ssrf_wait_timeouts(mocker, {"deadline": time.monotonic() - 1}) == []
+
+
+def test_dir_bruteforce_stops_once_deadline_passes(mocker):
+    """Son propre time.sleep (rate-limit) continuerait ~0.2 s par chemin restant après la deadline."""
+    import time
+    from scanner.modules.dir_bruteforce import DirBruteforceModule
+    mocker.patch("scanner.modules.dir_bruteforce.time.sleep")
+    ctx = {"deadline": time.monotonic() + 60}
+    not_found = mocker.Mock(status_code=404, headers={}, text="nope")
+    calls = []
+
+    def fake_get(url, context, **kw):
+        calls.append(url)
+        if len(calls) == 3:
+            context["deadline"] = time.monotonic() - 1
+        return not_found
+
+    mocker.patch("scanner.core.http.get", side_effect=fake_get)
+    DirBruteforceModule().scan("http://a/", ctx)
+    assert len(calls) == 3
+
+
 def test_ssl_tls_handshake_error_still_reported(mocker):
     import ssl
     from scanner.modules.ssl_tls import SslTlsModule
