@@ -11,7 +11,7 @@ Le résultat est mis dans `context` pour que les modules d'injection puissent
 fuzzer **toutes les surfaces d'attaque** découvertes, pas seulement l'URL initiale.
 """
 from __future__ import annotations
-from typing import List, Dict, Any, Set, Optional
+from typing import Callable, List, Dict, Any, Set, Optional
 from urllib.parse import urlparse, urljoin, urldefrag
 import requests
 import re
@@ -43,12 +43,12 @@ class Crawler:
                  max_pages: int = 30,
                  timeout: int = 5,
                  user_agent: str = "VulnScan/1.3 (security-audit)",
-                 deadline: Optional[float] = None):
+                 deadline_fn: Optional[Callable[[], Optional[float]]] = None):
         self.max_depth = max_depth
         self.max_pages = max_pages
         self.timeout = timeout
         self.user_agent = user_agent
-        self.deadline = deadline  # time.monotonic() ; None = pas de limite
+        self.deadline_fn = deadline_fn  # relu à chaque test : renvoie time.monotonic() ou None (pas de limite)
         self._visited: Set[str] = set()
 
     def crawl(self, seed_url: str, auth: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -116,7 +116,8 @@ class Crawler:
     # Internes
     # -----------------------------------------------------------
     def _out_of_time(self) -> bool:
-        return self.deadline is not None and time.monotonic() >= self.deadline
+        deadline = self.deadline_fn() if self.deadline_fn else None
+        return deadline is not None and time.monotonic() >= deadline
 
     def _fetch_and_parse(self, url: str) -> Optional[Dict[str, Any]]:
         try:

@@ -92,7 +92,7 @@ class ScannerEngine:
         if crawl and "crawled" not in context:
             try:
                 from .crawler import Crawler
-                crawler = Crawler(max_depth=1, max_pages=30, deadline=context.get("deadline"))
+                crawler = Crawler(max_depth=1, max_pages=30, deadline_fn=lambda: context.get("deadline"))
                 context["crawled"] = crawler.crawl(target, auth=context.get("auth"))
                 logger.info(f"Crawler : {context['crawled']['stats']}")
             except Exception as e:

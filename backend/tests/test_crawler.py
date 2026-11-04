@@ -65,7 +65,7 @@ def test_crawler_with_past_deadline_fetches_nothing():
     from unittest.mock import patch
     from scanner.core.crawler import Crawler
     with patch("scanner.core.crawler.requests.get") as get:
-        result = Crawler(deadline=time.monotonic() - 1).crawl("http://a/")
+        result = Crawler(deadline_fn=lambda: time.monotonic() - 1).crawl("http://a/")
     get.assert_not_called()
     assert set(result["urls"]) <= {"http://a/"}
 
@@ -78,3 +78,15 @@ def test_crawler_without_deadline_unchanged():
         result = Crawler().crawl("http://a/")
     assert get.called
     assert "http://a/" in result["urls"]
+
+
+def test_crawler_sees_deadline_set_after_construction():
+    import time
+    from unittest.mock import patch
+    from scanner.core.crawler import Crawler
+    ctx = {}
+    crawler = Crawler(deadline_fn=lambda: ctx.get("deadline"))
+    ctx["deadline"] = time.monotonic() - 1
+    with patch("scanner.core.crawler.requests.get") as get:
+        crawler.crawl("http://a/")
+    get.assert_not_called()

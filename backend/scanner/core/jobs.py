@@ -36,25 +36,32 @@ class JobStore:
             if sum(1 for v in self._jobs.values() if v["status"] == "running") >= MAX_RUNNING:
                 raise TooManyJobs()
             jid = uuid.uuid4().hex
-            context.setdefault("module_log", [])
+            context["module_log"] = []  # jamais la valeur du client
             job = {"status": "running", "context": context, "findings": None, "error": None,
                    "started_at": self._clock(), "finished_at": None}
             self._jobs[jid] = job
-        threading.Thread(target=self._run, args=(job, run_fn, target, enabled, crawl),
-                         daemon=True).start()
+        try:
+            threading.Thread(target=self._run, args=(job, run_fn, target, enabled, crawl),
+                             daemon=True).start()
+        except BaseException:
+            with self._lock:
+                self._jobs.pop(jid, None)
+            raise
         return jid
 
     def _run(self, job, run_fn, target, enabled, crawl) -> None:
         ctx = job["context"]
+        findings, error = None, "interrupted"
         try:
             findings, error = run_fn(target, ctx, enabled, crawl), None
-        except Exception as e:
-            findings, error = None, str(e) or type(e).__name__
-        with self._lock:
-            job["findings"], job["error"] = findings, error
-            job["status"] = ("error" if error is not None
-                             else "cancelled" if ctx.get("cancelled") else "done")
-            job["finished_at"] = self._clock()
+        except BaseException as e:  # SystemExit etc. : le job ne doit jamais rester "running"
+            error = str(e) or type(e).__name__
+        finally:
+            with self._lock:
+                job["findings"], job["error"] = findings, error
+                job["status"] = ("error" if error is not None
+                                 else "cancelled" if ctx.get("cancelled") else "done")
+                job["finished_at"] = self._clock()
 
     def snapshot(self, job_id: str) -> Optional[dict]:
         with self._lock:
