@@ -160,7 +160,8 @@ async function startScan(tabId, url) {
   }
 
   // 2. Préparer le scan
-  currentScan = {
+  activeRun = null; // jamais d'état d'arrêt hérité d'un scan précédent
+  const scan = currentScan = {
     id: crypto.randomUUID(),
     url,
     startedAt: Date.now(),
@@ -182,12 +183,15 @@ async function startScan(tabId, url) {
   } catch (e) {
     console.warn("[VulnScan] Analyse passive échouée :", e.message);
   }
+  // Stop (ou nouveau scan) pendant une phase await : ne plus toucher à currentScan.
+  const stopped = () => currentScan !== scan;
+  if (stopped()) return { success: true };
 
   // Enrichir et stocker les vulnérabilités client
   for (const raw of clientResult.vulnerabilities) {
     const v = ensureFinding(raw, url);
-    if (!currentScan.vulnerabilities.find(x => x.id === v.id)) {
-      currentScan.vulnerabilities.push(v);
+    if (!scan.vulnerabilities.find(x => x.id === v.id)) {
+      scan.vulnerabilities.push(v);
       // Renvoyer la version enrichie au panel
       broadcastMessage({ type: "VULN_FOUND", payload: v });
     }
@@ -197,9 +201,10 @@ async function startScan(tabId, url) {
   broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "backend", label: "Augmentation backend (en-têtes, CVE, corrélation)..." } });
   try {
     const backendVulns = await augmentViaBackend(cfg, url, clientResult);
+    if (stopped()) return { success: true };
     for (const v of backendVulns) {
       const enriched = ensureFinding(v, url);
-      currentScan.vulnerabilities.push(enriched);
+      scan.vulnerabilities.push(enriched);
       broadcastMessage({ type: "VULN_FOUND", payload: enriched });
     }
     console.log("[VulnScan] Backend augment : " + backendVulns.length + " findings");
@@ -207,21 +212,23 @@ async function startScan(tabId, url) {
     console.warn("[VulnScan] Augmentation backend échouée :", e.message);
   }
 
+  if (stopped()) return { success: true };
+
   // 5. Phase C — TESTS ACTIFS (sqli, xss, lfi, ssrf, etc.) si activés
   if (cfg.activeEnabled) {
     broadcastMessage({ type: "SCAN_PROGRESS", payload: { stage: "active", label: "Tests actifs (injections) en cours..." } });
     // activeRun : permet à stopScan d'attendre le résultat partiel avant de finaliser.
     let endActiveRun;
-    activeRun = { backendUrl: cfg.backendUrl, done: new Promise((res) => { endActiveRun = res; }) };
+    activeRun = { scan, stopRequested: false, backendUrl: cfg.backendUrl, done: new Promise((res) => { endActiveRun = res; }) };
     try {
       const { findings: activeVulns, discovery, moduleLog } = await runActiveModules(cfg, url);
       for (const v of activeVulns) {
         const enriched = ensureFinding(v, url);
-        currentScan.vulnerabilities.push(enriched);
+        scan.vulnerabilities.push(enriched);
         broadcastMessage({ type: "VULN_FOUND", payload: enriched });
       }
-      if (discovery) currentScan.discovery = discovery;
-      if (moduleLog) currentScan.moduleLog = moduleLog;
+      if (discovery) scan.discovery = discovery;
+      if (moduleLog) scan.moduleLog = moduleLog;
       console.log("[VulnScan] Tests actifs : " + activeVulns.length + " findings");
     } catch (e) {
       console.warn("[VulnScan] Tests actifs échoués :", e.message);
@@ -233,7 +240,7 @@ async function startScan(tabId, url) {
   }
 
   // 6. Finalisation
-  return finalizeScan();
+  return stopped() ? { success: true } : finalizeScan();
 }
 
 // =====================================================
@@ -378,13 +385,16 @@ async function runActiveModules(cfg, url) {
   console.log("[VulnScan] Modules actifs lancés :", enabled, "(auth:", auth ? "oui" : "non", ")");
 
   const budget = TIME_BUDGET_FOR_PROFILE[cfg.scanProfile] || 45;
+  const run = activeRun; // porte l'indicateur d'arrêt de CE scan
   const base = cfg.backendUrl + "/scanner/jobs";
   const EMPTY = { findings: [], discovery: null, moduleLog: [] };
   // Une ligne d'activité synthétique pour dire pourquoi aucun résultat actif n'est revenu.
-  const reportError = (reason) => broadcastMessage({
-    type: "MODULE_LOG",
-    payload: [{ module: "scanner", findings: 0, elapsedMs: 0, status: "error", error: reason }],
-  });
+  // Elle est aussi renvoyée dans moduleLog : SCAN_COMPLETED remplace la console par scan.moduleLog.
+  const reportError = (reason) => {
+    const line = { module: "scanner", findings: 0, elapsedMs: 0, status: "error", error: reason };
+    broadcastMessage({ type: "MODULE_LOG", payload: [line] });
+    return line;
+  };
 
   // Chaque appel reste < 5 s : aucune requête ne dépasse la règle des 30 s du service worker.
   const startJob = async () => {
@@ -409,7 +419,9 @@ async function runActiveModules(cfg, url) {
       throw err;
     }
     const { jobId } = await r.json();
-    if (currentScan) currentScan.backendJobId = jobId;
+    if (run && run.scan === currentScan) currentScan.backendJobId = jobId;
+    // Stop pressé avant l'arrivée de l'id : annuler tout de suite pour libérer le slot backend.
+    if (run && run.stopRequested) cancelBackendJob(cfg.backendUrl, jobId);
     return { jobId };
   };
   const getJob = async (jobId) => {
@@ -437,14 +449,14 @@ async function runActiveModules(cfg, url) {
     });
     if (!result) {
       console.warn("[VulnScan] job " + status + " sans résultat");
-      reportError(status === "error" ? "backend injoignable pendant le scan" : "scan abandonné (délai dépassé)");
-      return { ...EMPTY, moduleLog };
+      const line = reportError(status === "error" ? "backend injoignable pendant le scan" : "scan abandonné (délai dépassé)");
+      return { ...EMPTY, moduleLog: [...moduleLog, line] };
     }
     return { findings: result.findings || [], discovery: result.discovery || null, moduleLog: result.moduleLog || [] };
   } catch (e) {
     console.warn("[VulnScan] /scanner/jobs KO :", e.message);
-    reportError(e.status === 429 ? "backend occupé (2 scans actifs max)" : e.message);
-    return EMPTY;
+    const line = reportError(e.status === 429 ? "backend occupé (2 scans actifs max)" : e.message);
+    return { ...EMPTY, moduleLog: [line] };
   } finally {
     try { chrome.storage.session.remove("activeScanJob").catch(() => {}); } catch { /* best effort */ }
   }
@@ -597,12 +609,15 @@ function finalizeScan() {
 
 async function stopScan() {
   const scan = currentScan;
-  if (scan && scan.backendJobId && activeRun) {
-    // Annule le job puis laisse startScan récupérer le résultat partiel (≤ 8 s) et finaliser lui-même.
-    cancelBackendJob(activeRun.backendUrl, scan.backendJobId);
-    await Promise.race([activeRun.done, new Promise((res) => setTimeout(res, 8000))]);
+  const run = activeRun;
+  if (scan && run && run.scan === scan) {
+    // Phase active en cours : mémoriser l'arrêt (startJob annulera un id qui arrive après),
+    // annuler le job s'il est connu, puis laisser startScan récupérer le partiel (≤ 8 s).
+    run.stopRequested = true;
+    if (scan.backendJobId) cancelBackendJob(run.backendUrl, scan.backendJobId);
+    await Promise.race([run.done, new Promise((res) => setTimeout(res, 8000))]);
   }
-  return currentScan ? finalizeScan() : { success: true };
+  return currentScan === scan && scan ? finalizeScan() : { success: true };
 }
 
 // Borne appliquée UNIQUEMENT à la copie écrite dans chrome.storage.local.scanHistory
