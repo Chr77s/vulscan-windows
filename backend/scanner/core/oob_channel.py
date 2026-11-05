@@ -53,8 +53,9 @@ class NullChannel:
 
 
 def _default_make_tunnel():
-    from scanner.core.oob_tunnel import make_tunnel_channel
-    return make_tunnel_channel()
+    # Le câblage tunnel+listener est fourni par l'engine (Task 7) via le paramètre
+    # make_tunnel de select_channel. Sans lui, pas de tunnel -> repli webhook/off.
+    return None
 
 
 def _default_make_webhook():
