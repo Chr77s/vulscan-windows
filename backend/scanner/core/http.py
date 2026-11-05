@@ -146,9 +146,15 @@ def _throttle(url, context):
 
 
 def time_left(context: Optional[Dict[str, Any]]) -> Optional[float]:
-    """Secondes restantes avant context["deadline"] (time.monotonic), None si pas de budget."""
-    deadline = (context or {}).get("deadline")
-    return None if deadline is None else deadline - time.monotonic()
+    """Secondes restantes avant la plus proche de context["deadline"] (budget global /
+    cancel) et context["module_deadline"] (part équitable du module courant, Tier 1.4),
+    en time.monotonic. None si aucun budget."""
+    ctx = context or {}
+    eff = None
+    for d in (ctx.get("deadline"), ctx.get("module_deadline")):
+        if d is not None:
+            eff = d if eff is None else min(eff, d)
+    return None if eff is None else eff - time.monotonic()
 
 
 def send(method: str,

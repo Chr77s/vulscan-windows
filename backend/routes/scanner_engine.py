@@ -60,7 +60,7 @@ def _module_log_entry(e):
 _jobs = JobStore()
 
 # Clés pilotées par le serveur : jamais acceptées du client.
-_SERVER_CONTEXT_KEYS = ("deadline", "cancelled", "current_module", "module_log")
+_SERVER_CONTEXT_KEYS = ("deadline", "module_deadline", "cancelled", "current_module", "module_log")
 
 
 def _clean_context(raw):

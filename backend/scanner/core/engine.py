@@ -19,6 +19,23 @@ import time
 from .module_base import ScannerModule, Finding
 from .http import time_left
 
+
+def _fair_deadline(now: float, global_deadline, modules_remaining: int):
+    """Part équitable du budget restant pour le module courant (Tier 1.4).
+
+    Le dernier module (modules_remaining <= 1) prend tout le reste ; sinon on
+    plafonne à time_left / modules_restants, pour qu'un module glouton
+    (form-fuzzer, header-injection) n'affame pas les suivants. Jamais au-delà
+    du budget global. Sans budget global -> None (aucun plafond)."""
+    if global_deadline is None:
+        return None
+    if modules_remaining <= 1:
+        return global_deadline
+    remaining = global_deadline - now
+    if remaining <= 0:
+        return global_deadline
+    return now + remaining / modules_remaining
+
 logger = logging.getLogger("vulnscan.engine")
 
 
@@ -115,7 +132,10 @@ class ScannerEngine:
         module_log: List[Dict[str, Any]] = []
         # Liste vivante : un job en arrière-plan la lit pendant le scan (entrées ajoutées entières).
         context["module_log"] = module_log
-        for cls in modules_to_run:
+        # Tier 1.4 — équité : budget global figé, chaque module reçoit une part
+        # (time_left / modules_restants) pour qu'un module glouton n'affame pas les suivants.
+        global_deadline = context.get("deadline")
+        for idx, cls in enumerate(modules_to_run):
             left = time_left(context)
             if left is not None and (left <= 0 or left < cls.min_time_to_start_s):
                 module_log.append({"module": cls.name, "findings": 0, "elapsed_ms": 0,
@@ -123,6 +143,11 @@ class ScannerEngine:
                                    "reason": "cancelled" if context.get("cancelled") else "time_budget"})
                 continue
             context["current_module"] = cls.name
+            # Plafond de part équitable pour CE module, via une clé séparée pour ne
+            # jamais écraser la deadline globale ni un cancel (http.time_left prend le min).
+            if global_deadline is not None:
+                context["module_deadline"] = _fair_deadline(time.monotonic(), global_deadline,
+                                                            len(modules_to_run) - idx)
             # shortcut: once started, a module can still overrun the deadline by one in-flight request (timeout clipped to >= 0.5 s) or by a min_time_to_start_s estimate that proves too low; the extension aborts 15 s after the budget for that reason — upgrade to per-module cancellation if that margin proves too small.
             t0 = time.monotonic()
             try:
@@ -147,6 +172,8 @@ class ScannerEngine:
                     "status": "error",
                     "error": str(e),
                 })
+            finally:
+                context["module_deadline"] = None  # le skip-check suivant repart du budget global
 
         context["current_module"] = None
         # Arrêt du canal OOB (tunnel/listener). Les modules sont protégés
