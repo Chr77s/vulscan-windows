@@ -20,6 +20,7 @@ from scanner.core import http
 from scanner.core.matchers import HttpResult, Matcher, evaluate
 from scanner.core.module_base import ScannerModule, Finding
 from scanner.payloads import get_payloads
+from scanner.core.oob import OOBCanary
 
 
 class XssModule(ScannerModule):
@@ -47,8 +48,12 @@ class XssModule(ScannerModule):
         findings: List[Finding] = []
         parsed = urlparse(target)
         params = dict(parse_qsl(parsed.query))
+        # XSS aveugle/stockée via OOB (couvre aussi les formulaires, donc avant le
+        # court-circuit "pas de param de query").
+        findings.extend(self._blind_oob(target, parsed, params, context))
+
         if not params:
-            return []
+            return findings
 
         depth = context.get("depth")
         catalog = self._payload_catalog(depth)
@@ -127,6 +132,68 @@ class XssModule(ScannerModule):
                     evidence_request=req_ev, evidence_response=resp_ev,
                 ))
         return findings
+
+    def _blind_oob(self, target, parsed, params, context) -> List[Finding]:
+        """Injecte un marqueur <img src=canary> dans les params et les champs de
+        formulaire découverts, re-visite les pages, et confirme UNIQUEMENT si le
+        canary est hit. Limite: un stocké déclenché par un humain après la fenêtre
+        de scan ne sera pas vu (voir doc OOB)."""
+        canary = OOBCanary.new(context)
+        if not canary.url:
+            return []
+        marker = f'<img src="{canary.url}">'
+        ua = {"User-Agent": "VulnScan/1.2"}
+        # 1) params de query
+        for pn in params:
+            np = dict(params)
+            np[pn] = marker
+            try:
+                http.get(urlunparse(parsed._replace(query=urlencode(np))), context, timeout=8, headers=ua)
+            except Exception:
+                pass
+        # 2) champs de formulaires découverts
+        crawled = context.get("crawled") or {}
+        for form in (crawled.get("forms") or [])[:5]:
+            action = form.get("action") or target
+            fields = {f.get("name"): marker for f in form.get("fields", []) if f.get("name")}
+            if not fields:
+                continue
+            try:
+                if (form.get("method") or "GET").upper() == "POST":
+                    http.post(action, context, data=fields, timeout=8, headers=ua)
+                else:
+                    sep = "&" if "?" in action else "?"
+                    http.get(action + sep + urlencode(fields), context, timeout=8, headers=ua)
+            except Exception:
+                pass
+        # 3) re-visite des pages (rendu stocké côté serveur)
+        for u in (crawled.get("urls") or [])[:8]:
+            try:
+                http.get(u, context, timeout=8, headers=ua)
+            except Exception:
+                pass
+        left = http.time_left(context)
+        wait = 4 if left is None else min(4, left)
+        if wait > 0 and canary.wait_for_hit(context, timeout=wait):
+            hit = canary.hits()[0] if canary.hits() else {}
+            return [Finding(
+                type="xss", severity="high",
+                title="XSS aveugle/stockée confirmée via OOB",
+                description=(
+                    f"Un marqueur injecté a provoqué une requête vers le canary {canary.url} "
+                    f"(méthode {hit.get('method', '?')}). La charge est donc rendue/exécutée "
+                    "hors de la réponse directe (XSS stockée ou aveugle)."
+                ),
+                recommendation=(
+                    "Échapper/encoder toute donnée réfléchie ou stockée selon son contexte de "
+                    "sortie ; appliquer une CSP stricte."
+                ),
+                url=target, parameter="(blind/stored)", payload=marker,
+                evidence=f"Hit OOB : {hit.get('method')} from {hit.get('ip')} UA={hit.get('user_agent', '')[:60]}",
+                confidence=95, cwe_id="CWE-79", owasp_id="A03:2021", cvss_base=8.0,
+                detection_method="oob-canary", source="module:xss",
+            )]
+        return []
 
     def _try_confirm(self, parsed, original_params, param_name, ctx, depth, context):
         """Essaie chaque payload du catalogue (filtré par depth) pour ce contexte, et retourne
