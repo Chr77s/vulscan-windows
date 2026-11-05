@@ -187,6 +187,31 @@ Bouton dans la status bar :
 - **HTML** : rapport stylé avec résumé exécutif et KPIs
 - **PDF** : ouvre l'HTML en mode impression, Ctrl+P → Enregistrer en PDF
 
+## OOB / OAST (détection des vulns aveugles)
+
+Pour confirmer les vulnérabilités *blind* (SSRF, XXE, injection de commande, XSS
+stockée, en-têtes), VulnScan fait exécuter à la cible une requête vers un
+**canary** à identifiant unique : un rappel reçu = preuve, aucun rappel = aucun
+finding.
+
+Canal choisi au démarrage du scan via `VULNSCAN_OOB_MODE` :
+
+| Mode | Comportement |
+|------|--------------|
+| `auto` (défaut) | cible locale → canary local ; cible publique → tunnel, sinon webhook.site, sinon off |
+| `local` | endpoint `/oob` du backend (cibles locales uniquement) |
+| `tunnel` | expose le listener canary via cloudflared / localtunnel (preuves 100 % locales) |
+| `webhook` | webhook.site (seul l'uid opaque transite par le tiers) |
+| `off` | aucune détection OOB |
+
+- **Tunnel** : installez `cloudflared` (quick tunnel, HTTPS, sans compte) ou
+  `localtunnel`. Chemin personnalisé via `VULNSCAN_TUNNEL_BIN`. Port du listener :
+  `VULNSCAN_OOB_PORT` (défaut 9877).
+- **Isolation** : le tunnel n'expose **que** le listener canary (`/oob/log/<uid>`
+  sur 127.0.0.1), jamais le backend complet (`/scanner/run`, `/history`…).
+- **Limite** : une XSS stockée déclenchée par un humain après la fin du scan n'est
+  pas vue (le rappel arrive hors fenêtre).
+
 ## ⚠️ Sécurité & éthique
 
 - **Le mode "actif"** (SQLi blind, XSS reflection) envoie des requêtes vers la cible. À utiliser uniquement sur **vos propres sites** ou avec autorisation écrite.

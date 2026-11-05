@@ -31,11 +31,10 @@ finding » et le différentiel par rapport à une baseline.
    *Modif :* enregistrer une séquence de connexion (via l'onglet caché déjà utilisé pour DOM XSS), détecter la perte de session (motif de page de login) et ré-authentifier en cours de scan ; champ « est-on toujours connecté ? » dans le contexte.
    *Effort :* élevé.
 
-2. **OOB/OAST complet et corrélé (type Burp Collaborator / interactsh)**
+2. **OOB/OAST complet et corrélé (type Burp Collaborator / interactsh)** — ✅ fait (2026-11-05)
    *Leaders :* détection des vulns *aveugles* (SSRF, XXE, RCE, XSS stocké, SQLi blind) via rappel DNS/HTTP hors bande.
-   *VulnScan :* canari OOB basique, non corrélé à chaque payload.
-   *Modif :* identifiant unique par payload injecté → corrélation stricte rappel↔finding ; couvrir SSRF/XXE/cmdi/XSS-stocké aveugles. Oracle = réception du rappel, imparable.
-   *Effort :* élevé (nécessite un endpoint public ou un service interactsh).
+   *Livré :* canal hybride (local/tunnel cloudflared/webhook.site/off) choisi au démarrage, listener canary isolé (127.0.0.1, `/oob/log` seul, jamais le backend complet), uid unique par payload → corrélation stricte rappel↔finding, câblé dans SSRF/XXE/command-injection/Host-header/XSS-aveugle. Oracle = réception du rappel. Voir `docs/superpowers/specs/2026-11-05-oob-oast-correle-design.md`.
+   *Reste :* corrélation DNS fine (sous-domaine par uid) non couverte ; un stocké déclenché après la fenêtre de scan n'est pas vu.
 
 3. **Crawl des SPA (rendu JavaScript)**
    *Leaders :* rendu headless, suivi d'état, découverte des routes générées en JS.
