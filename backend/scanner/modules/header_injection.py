@@ -21,6 +21,8 @@ import re
 from scanner.core import http
 from scanner.core.module_base import ScannerModule, Finding
 from scanner.payloads import get_payloads
+from scanner.core.oob import OOBCanary
+from urllib.parse import urlparse
 
 
 class HeaderInjectionModule(ScannerModule):
@@ -43,6 +45,49 @@ class HeaderInjectionModule(ScannerModule):
         if not re.match(r"^https?://", target):
             return []
         findings: List[Finding] = []
+
+        # === Host-header / en-tête aveugle via rappel OOB ===
+        # On injecte l'URL canary COMPLÈTE (avec l'uid dans le chemin) dans les
+        # en-têtes qu'une app peut suivre ou refléter en URL. Si le serveur la
+        # joint, le canary est hit -> preuve. (Un app n'utilisant que le hostname
+        # ne corrèle pas : limite assumée, voir la doc OOB.)
+        canary = OOBCanary.new(context)
+        if canary.url:
+            cu = canary.url
+            host = urlparse(cu).netloc
+            try:
+                http.get(target, context, timeout=8, allow_redirects=False, headers={
+                    "User-Agent": "VulnScan/1.3",
+                    "X-Forwarded-Host": host,
+                    "Forwarded": f"host={host}",
+                    "Referer": cu,
+                    "X-Forwarded-For": cu,
+                })
+            except Exception:
+                pass
+            left = http.time_left(context)
+            wait = 4 if left is None else min(4, left)
+            if wait > 0 and canary.wait_for_hit(context, timeout=wait):
+                hit = canary.hits()[0] if canary.hits() else {}
+                findings.append(Finding(
+                    type="header-injection", severity="high",
+                    title="Injection d'en-tête aveugle confirmée via OOB",
+                    description=(
+                        f"Un en-tête injecté a provoqué une requête du serveur vers le canary "
+                        f"{cu} (méthode {hit.get('method', '?')}). Rappel hors-bande = preuve "
+                        "d'un traitement non sûr d'un en-tête contrôlé par le client (Host/Forwarded)."
+                    ),
+                    recommendation=(
+                        "Ne pas construire d'URL ni de requête serveur à partir d'en-têtes "
+                        "contrôlés par le client ; fixer un host canonique côté serveur."
+                    ),
+                    url=target, parameter="(en-têtes: Host/X-Forwarded-Host/Forwarded/Referer)",
+                    payload=cu,
+                    evidence=f"Hit OOB : {hit.get('method')} from {hit.get('ip')} UA={hit.get('user_agent', '')[:60]}",
+                    confidence=95, cwe_id="CWE-74", owasp_id="A03:2021", cvss_base=7.5,
+                    detection_method="oob-canary", source="module:header-injection",
+                ))
+                return findings
 
         # Cibles : URL initiale + URLs découvertes par le crawler (limité à 5)
         urls_to_test = [target]
