@@ -1,83 +1,71 @@
-"""
-Helper OOB (Out-of-Band) — utilisé par les modules pour générer des canaries
-et vérifier les hits.
-
-Usage typique dans un module :
+"""Helper OOB (Out-of-Band) — utilisé par les modules pour générer des canaries
+et vérifier les hits, via le canal choisi pour le scan.
 
     from scanner.core.oob import OOBCanary
-
-    canary = OOBCanary.new()
+    canary = OOBCanary.new(context)       # context facultatif -> canal local par défaut
     payload = f"<img src='{canary.url}'>"
-    requests.post(target, data={"comment": payload})
+    ...
+    if canary.wait_for_hit(context):      # borné par la deadline du scan
+        # vuln blind confirmée
 
-    # Plus tard...
-    time.sleep(2)
-    if canary.was_hit():
-        # Vuln blind XSS confirmée
-        ...
-
-Implémentation : appelle les endpoints /oob/new et /oob/check côté backend Flask.
-Le helper utilise donc HTTP local (localhost:9876) pour communiquer avec son
-propre Flask — c'est simple et ça fonctionne pour les scans sur cibles internes.
+Le canal provient de `context["oob_channel"]` (posé par l'engine) ; sans lui,
+on retombe sur le canal local (endpoint /oob du backend). Un canal `off`
+renvoie `url=None` : les modules ne tirent alors aucun payload OOB.
 """
 from __future__ import annotations
-from typing import Optional
-import requests
+from typing import Any, Dict, List, Optional
 import time
 import uuid as uuid_mod
-import os
 
-# URL du backend (lui-même) — par défaut localhost:9876
-OOB_BASE = os.environ.get("VULNSCAN_OOB_BASE", "http://127.0.0.1:9876")
+
+def _channel_from(context: Optional[Dict[str, Any]]):
+    ch = (context or {}).get("oob_channel")
+    if ch is not None:
+        return ch
+    from scanner.core.oob_channel import LocalChannel
+    return LocalChannel()
 
 
 class OOBCanary:
-    def __init__(self, uid: str, url: str):
+    def __init__(self, uid: str, url: Optional[str], channel):
         self.uid = uid
         self.url = url
+        self.channel = channel
 
     @classmethod
-    def new(cls) -> "OOBCanary":
-        """Crée un nouveau canary. Fallback local si endpoint pas joignable."""
-        try:
-            r = requests.post(f"{OOB_BASE}/oob/new", timeout=3)
-            if r.ok:
-                data = r.json()
-                return cls(data["uid"], data["url"])
-        except Exception:
-            pass
-        # Fallback : génère localement
+    def new(cls, context: Optional[Dict[str, Any]] = None) -> "OOBCanary":
+        channel = _channel_from(context)
         uid = uuid_mod.uuid4().hex
-        return cls(uid, f"{OOB_BASE}/oob/log/{uid}")
-
-    def was_hit(self) -> bool:
-        """Renvoie True si au moins 1 hit a été reçu pour ce uuid."""
-        return self.hit_count() > 0
-
-    def hit_count(self) -> int:
         try:
-            r = requests.get(f"{OOB_BASE}/oob/check/{self.uid}", timeout=3)
-            if r.ok:
-                return r.json().get("hit_count", 0)
+            url = channel.register(uid)
         except Exception:
-            return 0
-        return 0
+            url = None
+        return cls(uid, url, channel)
 
-    def hits(self) -> list:
-        """Renvoie la liste détaillée des hits."""
+    def hits(self) -> List[dict]:
         try:
-            r = requests.get(f"{OOB_BASE}/oob/check/{self.uid}", timeout=3)
-            if r.ok:
-                return r.json().get("hits", [])
+            return self.channel.poll(self.uid)
         except Exception:
             return []
-        return []
 
-    def wait_for_hit(self, timeout: int = 5, poll: float = 0.5) -> bool:
-        """Attend jusqu'à `timeout` secondes qu'un hit arrive."""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+    def hit_count(self) -> int:
+        return len(self.hits())
+
+    def was_hit(self) -> bool:
+        return self.hit_count() > 0
+
+    def wait_for_hit(self, context: Optional[Dict[str, Any]] = None,
+                     timeout: float = 5, poll: float = 0.5) -> bool:
+        """Attend un hit, borné par le plus court de `timeout` et de la deadline du scan."""
+        from scanner.core.http import time_left
+        hard_deadline = time.monotonic() + timeout
+        while True:
             if self.was_hit():
                 return True
-            time.sleep(poll)
-        return False
+            if time.monotonic() >= hard_deadline:
+                return False
+            budget = time_left(context) if context else None
+            if budget is not None and budget <= 0:
+                return False
+            nap = poll if budget is None else min(poll, budget)
+            time.sleep(min(nap, 0.5))
