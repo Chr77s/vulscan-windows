@@ -64,7 +64,9 @@ class SsrfModule(ScannerModule):
         for param_name in params:
             if param_name.lower() not in self.URL_LIKE_PARAMS and not re.match(r"^https?://", params[param_name]):
                 continue
-            canary = OOBCanary.new()
+            canary = OOBCanary.new(context)
+            if not canary.url:          # canal OOB off/indisponible -> pas de test blind
+                continue
             try:
                 new_params = dict(params)
                 new_params[param_name] = canary.url
@@ -74,7 +76,7 @@ class SsrfModule(ScannerModule):
                 continue
             left = http.time_left(context)  # l'attente OOB ne passe pas par http.send
             wait = 4 if left is None else min(4, left)
-            if wait > 0 and canary.wait_for_hit(timeout=wait):
+            if wait > 0 and canary.wait_for_hit(context, timeout=wait):
                 hit = canary.hits()[0] if canary.hits() else {}
                 findings.append(Finding(
                     type="ssrf", severity="critical",
