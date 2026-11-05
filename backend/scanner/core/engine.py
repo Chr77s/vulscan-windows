@@ -86,6 +86,9 @@ class ScannerEngine:
         if budget > 0:
             context.setdefault("deadline", time.monotonic() + budget)
 
+        # OOB : choisir le canal de rappel pour ce scan (local/tunnel/webhook/off).
+        oob_teardown = self._setup_oob(context, target)
+
         # =========================================================
         # PHASE 0 — Crawler / discovery (avant les modules d'injection)
         # =========================================================
@@ -146,6 +149,9 @@ class ScannerEngine:
                 })
 
         context["current_module"] = None
+        # Arrêt du canal OOB (tunnel/listener). Les modules sont protégés
+        # individuellement (try/except par module), donc aucun ne contourne ceci.
+        oob_teardown()
 
         # Fusion bayésienne
         merged = self._bayesian_merge(findings)
@@ -170,6 +176,61 @@ class ScannerEngine:
         context["module_log"] = module_log
         self.last_module_log = module_log
         return merged
+
+    # -----------------------------------------------------------------
+    # OOB : sélection du canal de rappel + cycle de vie (tunnel/listener)
+    # -----------------------------------------------------------------
+    def _setup_oob(self, context: Dict[str, Any], target: str):
+        """Pose context['oob_channel'] et renvoie un teardown idempotent.
+
+        Jamais d'exception : tout échec de canal -> pas d'OOB, scan continue.
+        Si l'appelant a déjà fourni un canal (tests), on ne le possède pas.
+        """
+        if context.get("oob_channel") is not None:
+            self.last_oob_channel = context["oob_channel"]
+            return lambda: None
+
+        import os
+        try:
+            from scanner.core import oob_channel as _oc
+        except Exception:
+            context["oob_channel"] = None
+            self.last_oob_channel = None
+            return lambda: None
+
+        mode = os.environ.get("VULNSCAN_OOB_MODE", "auto")
+
+        def make_tunnel():
+            try:
+                from scanner.core.oob_listener import start_listener
+                from scanner.core.oob_tunnel import start_tunnel, TunnelChannel
+                port = int(os.environ.get("VULNSCAN_OOB_PORT", "9877"))
+                actual_port, stop_listener = start_listener(port)
+                res = start_tunnel(actual_port)
+                if not res:
+                    stop_listener()
+                    return None
+                url, stop_tunnel = res
+                return TunnelChannel(url, stop=lambda: (stop_tunnel(), stop_listener()))
+            except Exception:
+                return None
+
+        try:
+            ch = _oc.select_channel(target, mode=mode, make_tunnel=make_tunnel)
+        except Exception:
+            ch = None
+        context["oob_channel"] = ch
+        self.last_oob_channel = ch
+
+        def teardown():
+            stop = getattr(ch, "stop", None)
+            if callable(stop):
+                try:
+                    stop()
+                except Exception:
+                    pass
+
+        return teardown
 
     # -----------------------------------------------------------------
     # Scoring bayésien — combinaison de signaux indépendants
